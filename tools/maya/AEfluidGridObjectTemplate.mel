@@ -1,0 +1,76 @@
+//
+// Copyright 2008 Johannes Schmid
+//
+// Attribute editor template for the GridFluidObject plug-in.
+// Put this somewhere in you MAYA_SCRIPT_PATH (e.g. ~/maya/scripts
+// or "My Documents\maya\scripts") and restart maya.
+//
+// Note that the for the input file mask, the string "0000" will
+// be replaced with "%04d", so if you pick the first file of a
+// sequence in the file browser, it should work right away.
+//
+
+
+global proc int AEGridAssignCB( string $GridAttribute,
+                                 string $filename,
+                                 string $fileType )
+{
+	$filename = `substitute "0000" $filename "%04d"`;
+	setAttr $GridAttribute -type "string" $filename;
+
+	return true;
+}
+
+global proc AEGridBrowser( string $cmd )
+{
+    //string  $workspace = `workspace -q -fn`;
+    //setWorkingDirectory $workspace "image" "sourceImages";
+	
+	fileBrowser ($cmd, "Open", "Grid", 0);
+}
+
+global proc AEGridNameNew (string $GridAttribute)
+{
+	setUITemplate -pst attributeEditorTemplate;
+	rowLayout -nc 3 GridFileMaskLayout;
+		text -label "Input File Mask";
+		textField GridFileMaskField;
+		symbolButton -image "navButtonBrowse.xpm" browser;
+	setParent ..;
+	setUITemplate -ppt;
+	
+    AEGridTextureNameReplace $GridAttribute;
+}
+
+global proc AEGridTextureNameReplace (string $GridAttribute)
+{
+	connectControl GridFileMaskField $GridAttribute;
+
+    string $command = "AEGridAssignCB "+" "+$GridAttribute;
+
+    button -e -c
+		("AEGridBrowser \"" + $command + "\"" ) browser;
+}
+
+
+global proc AEfluidGridObjectTemplate( string $nodeName )
+{
+	editorTemplate -beginScrollLayout;
+
+	editorTemplate -beginLayout "Grid Fluid Object Attributes" -collapse 0;
+		editorTemplate -callCustom "AEGridNameNew" 
+					"AEGridTextureNameReplace" 
+					"inFileMask";	
+		editorTemplate -addControl "indexOffset";
+		editorTemplate -addControl "scale";
+		editorTemplate -addControl "fluidName";   	
+	editorTemplate -endLayout;
+
+	//editorTemplate -suppress "time";
+		
+	// include/call base class/node attributes
+	AEdependNodeTemplate $nodeName;
+	
+	editorTemplate -addExtraControls;
+	editorTemplate -endScrollLayout;
+}

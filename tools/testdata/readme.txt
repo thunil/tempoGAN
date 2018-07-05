@@ -1,0 +1,1 @@
+Reference data for test runs is stored and generated here - either download it from the mantaflow website, or generate it by calling "MANTA_GEN_TEST_DATA=1 manta/tools/tests/runTests.py <path-to-mantaflow-executable>"

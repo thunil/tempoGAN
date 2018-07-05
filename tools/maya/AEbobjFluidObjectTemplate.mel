@@ -1,0 +1,76 @@
+//
+// Copyright 2008 Johannes Schmid
+//
+// Attribute editor template for the bobjFluidObject plug-in.
+// Put this somewhere in you MAYA_SCRIPT_PATH (e.g. ~/maya/scripts
+// or "My Documents\maya\scripts") and restart maya.
+//
+// Note that the for the input file mask, the string "0000" will
+// be replaced with "%04d", so if you pick the first file of a
+// sequence in the file browser, it should work right away.
+//
+
+
+global proc int AEbobjAssignCB( string $bobjAttribute,
+                                 string $filename,
+                                 string $fileType )
+{
+	$filename = `substitute "0000" $filename "%04d"`;
+	setAttr $bobjAttribute -type "string" $filename;
+
+	return true;
+}
+
+global proc AEbobjBrowser( string $cmd )
+{
+    //string  $workspace = `workspace -q -fn`;
+    //setWorkingDirectory $workspace "image" "sourceImages";
+	
+	fileBrowser ($cmd, "Open", "bobj", 0);
+}
+
+global proc AEbobjNameNew (string $bobjAttribute)
+{
+	setUITemplate -pst attributeEditorTemplate;
+	rowLayout -nc 3 bobjFileMaskLayout;
+		text -label "Input File Mask";
+		textField bobjFileMaskField;
+		symbolButton -image "navButtonBrowse.xpm" browser;
+	setParent ..;
+	setUITemplate -ppt;
+	
+    AEbobjTextureNameReplace $bobjAttribute;
+}
+
+global proc AEbobjTextureNameReplace (string $bobjAttribute)
+{
+	connectControl bobjFileMaskField $bobjAttribute;
+
+    string $command = "AEbobjAssignCB "+" "+$bobjAttribute;
+
+    button -e -c
+		("AEbobjBrowser \"" + $command + "\"" ) browser;
+}
+
+
+global proc AEbobjFluidObjectTemplate( string $nodeName )
+{
+	editorTemplate -beginScrollLayout;
+
+	editorTemplate -beginLayout "bobj Fluid Object Attributes" -collapse 0;
+		editorTemplate -callCustom "AEbobjNameNew" 
+					"AEbobjTextureNameReplace" 
+					"inFileMask";	
+		editorTemplate -addControl "indexOffset";
+		editorTemplate -addControl "scale";
+	editorTemplate -endLayout;
+
+	//editorTemplate -suppress "time";
+	editorTemplate -suppress "outputMesh";
+   		
+	// include/call base class/node attributes
+	AEdependNodeTemplate $nodeName;
+	
+	editorTemplate -addExtraControls;
+	editorTemplate -endScrollLayout;
+}

@@ -1,0 +1,8 @@
+$fsh=`create3DFluid 10 10 10 10 10 10`;
+$fgo=`createNode fluidGridObject`;
+disconnectAttr time1.outTime {$fsh+".currentTime"};
+connectAttr -f time1.outTime {$fgo+".inTime"};
+connectAttr -f {$fgo+".outTime"} {$fsh+".currentTime"};
+setAttr -type "string" {$fgo+".inFileMask"} "/tmp/d%04d.uni";
+setAttr -type "string" {$fgo+".fluid"} $fsh;
+select -r $fgo;

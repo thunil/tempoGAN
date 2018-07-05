@@ -1,0 +1,7 @@
+$tra=`createNode transform`; 
+$msh=`createNode mesh -p $tra`; 
+sets -add initialShadingGroup $msh; 
+$bfo=`createNode bobjFluidObject`;
+connectAttr time1.outTime {$bfo+".time"}; 
+connectAttr {$bfo+".outputMesh"} {$msh+".inMesh"};
+setAttr -type "string" {$bfo+".inFileMask"} "/tmp/d%04d.bobj.gz";
