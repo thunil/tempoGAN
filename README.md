@@ -60,3 +60,17 @@ By default, these examples run on simulation "2006" and "3006" for 3D.
 
 Note: all the commands above are just examples, please check parameters when
 running them (esp. paths, simulation ID ranges etc.)
+
+## BibTex citation
+```
+@article{you2018tempoGAN,
+title={tempoGAN: A Temporally Coherent, Volumetric GAN for Super-resolution Fluid Flow},
+author={Xie, You and Franz,Erik and Chu, Mengyu and Thuerey, Nils},
+journal={ACM Transactions on Graphics (TOG)},
+volume={37},
+number={4},
+pages={95},
+year={2018},
+publisher={ACM}
+}
+```
