@@ -22,7 +22,7 @@ Main source code directories:
 
 And two data directories were ouputs will be written:
 
-`.../tensorflow/2ddata_sim:` contains the training and test data
+`.../tensorflow/2ddata_sim:` contains the training, validation and test data
 
 `.../tensorflow/2ddata_gan:` outputs will be written here
 

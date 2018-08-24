@@ -76,9 +76,9 @@ batch_size	  = int(ph.getParam( "batchSize",  	  128 ))			# batch size for pretr
 batch_size_disc = int(ph.getParam( "batchSizeDisc",   batch_size )) 	# batch size for disc runs when training gan
 batch_size_gen  = int(ph.getParam( "batchSizeGen",	batch_size )) 	# batch size for gen runs when training gan
 trainGAN		= int(ph.getParam( "trainGAN",   	  True ))>0 		# GAN trainng can be switched off to use pretrainig only
-trainingEpochs  = int(ph.getParam( "trainingEpochs",  100000 )) 		# for GAN training
-discRuns 		= int(ph.getParam( "discRuns",  	  1 )) 				# number of discrimiinator optimizer runs per epoch
-genRuns  		= int(ph.getParam( "genRuns",  		  1 )) 				# number or generator optimizer runs per epoch
+trainingIters  = int(ph.getParam( "trainingIters",  100000 )) 		# for GAN training
+discRuns 		= int(ph.getParam( "discRuns",  	  1 )) 				# number of discrimiinator optimizer runs per iteration
+genRuns  		= int(ph.getParam( "genRuns",  		  1 )) 				# number or generator optimizer runs per iteration
 batch_norm		= int(ph.getParam( "batchNorm",	   True ))>0			# apply batch normalization to conv and deconv layers
 bn_decay		= float(ph.getParam( "bnDecay",	   0.999 ))			# decay of batch norm EMA
 use_spatialdisc = int(ph.getParam( "use_spatialdisc",		   True )) #use spatial discriminator or not
@@ -95,13 +95,13 @@ flip	 =   int(ph.getParam( "flip",		  1	 ))
 
 #Test and Save
 testPathStartNo = int(ph.getParam( "testPathStartNo", 0  ))
-testInterval	= int(ph.getParam( "testInterval", 	  20  )) 			# interval in epochs to run tests should be lower or equal outputInterval
-numTests		= int(ph.getParam( "numTests", 		  10  )) 			# number of tests to run from test data each test interval, run as batch
-outputInterval	= int(ph.getParam( "outputInterval",  100  ))			# interval in epochs to output statistics
-saveInterval	= int(ph.getParam( "saveInterval",	  200  ))	 		# interval in epochs to save model
+valiInterval	= int(ph.getParam( "valiInterval", 	  20  )) 			# interval in iterations to run validation, should be lower or equal outputInterval
+numValis		= int(ph.getParam( "numValis", 		  10  )) 			# number of validation runs to perform from vali data each interval, run as batch
+outputInterval	= int(ph.getParam( "outputInterval",  100  ))			# interval in iterations to output statistics
+saveInterval	= int(ph.getParam( "saveInterval",	  200  ))	 		# interval in iterations to save model
 alwaysSave	    = int(ph.getParam( "alwaysSave",	  True  )) 			#
 maxToKeep		= int(ph.getParam( "keepMax",		 3  )) 			# maximum number of model saves to keep in each test-run
-genTestImg		= int(ph.getParam( "genTestImg",	  -1 )) 			# if > -1 generate test image every output interval
+genValiImg		= int(ph.getParam( "genValiImg",	  -1 )) 			# if > -1 generate validation image every output interval
 note			= ph.getParam( "note",		   "" )					# optional info about the current test run, printed in log and overview
 data_fraction	= float(ph.getParam( "data_fraction",		   0.3 ))
 frameMax		= int(ph.getParam( "frameMax",		   200 ))
@@ -446,7 +446,7 @@ if not outputOnly: #setup for training
 	if use_spatialdisc:
 		disc, dy1, dy2, dy3, dy4 = disc_model(x_disc, y, use_batch_norm=bn, train=train)
 		gen, gy1, gy2, gy3, gy4 = disc_model(x_disc, gen_part, reuse=True, use_batch_norm=bn, train=train)
-	if genTestImg > -1: sampler = gen_part
+	if genValiImg > -1: sampler = gen_part
 else: #setup for generating output with trained model
 	sampler = gen_model(x, use_batch_norm=bn, train=False)
 
@@ -529,7 +529,7 @@ if not outputOnly:
 	lr_global_step = tf.Variable(0, trainable=False)
 	learning_rate_scalar = learning_rate
 	if decayLR:
-		learning_rate = tf.train.polynomial_decay(learning_rate, lr_global_step, trainingEpochs//2, learning_rate_scalar*0.05, power=1.1)
+		learning_rate = tf.train.polynomial_decay(learning_rate, lr_global_step, trainingIters//2, learning_rate_scalar*0.05, power=1.1)
 
 	update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 	gen_update_ops = update_ops[:]
@@ -668,10 +668,10 @@ if not outputOnly:
 
 	#testing losses
 	if use_spatialdisc:
-		lossTest_disc_disc   = tf.summary.scalar("discriminator-loss test real", disc_loss_disc)
-		lossTest_disc_gen   = tf.summary.scalar("discriminator-loss test generated", disc_loss_gen)
-		lossTest_disc = tf.summary.scalar("discriminator-loss test", disc_loss)
-		lossTest_gen   = tf.summary.scalar("generator-loss test", gen_loss)
+		lossVali_disc_disc   = tf.summary.scalar("discriminator-loss vali real", disc_loss_disc)
+		lossVali_disc_gen   = tf.summary.scalar("discriminator-loss vali generated", disc_loss_gen)
+		lossVali_disc = tf.summary.scalar("discriminator-loss vali", disc_loss)
+		lossVali_gen   = tf.summary.scalar("generator-loss vali", gen_loss)
 
 	#discriminator output [0,1] for real input
 	if use_spatialdisc:
@@ -680,33 +680,33 @@ if not outputOnly:
 
 	#discriminator output [0,1] for generated input
 	if use_spatialdisc:
-		outTest_disc_real = tf.summary.scalar("discriminator-out test", disc_sigmoid)
-		outTest_disc_gen = tf.summary.scalar("generator-out test", gen_sigmoid)
+		outVali_disc_real = tf.summary.scalar("discriminator-out vali", disc_sigmoid)
+		outVali_disc_gen = tf.summary.scalar("generator-out vali", gen_sigmoid)
 	
 	if(useTempoD): # all temporal losses
 		# training losses, disc & gen
 		lossTrain_disc_t = tf.summary.scalar("T discriminator-loss train", t_disc_loss)
 		lossTrain_gen_t = tf.summary.scalar("T generator-loss train", t_gen_loss)
 		
-		# testing losses, discriminator( positive, negative ), generator
-		lossTest_disc_disc_t = tf.summary.scalar("T discriminator-loss test real", t_disc_loss_disc)
-		lossTest_disc_gen_t = tf.summary.scalar("T discriminator-loss test generated", t_disc_loss_gen)
-		lossTest_disc_t = tf.summary.scalar("T discriminator-loss test", t_disc_loss)
-		lossTest_gen_t = tf.summary.scalar("T generator-loss test", t_gen_loss)
+		# validation losses, discriminator( positive, negative ), generator
+		lossVali_disc_disc_t = tf.summary.scalar("T discriminator-loss vali real", t_disc_loss_disc)
+		lossVali_disc_gen_t = tf.summary.scalar("T discriminator-loss vali generated", t_disc_loss_gen)
+		lossVali_disc_t = tf.summary.scalar("T discriminator-loss vali", t_disc_loss)
+		lossVali_gen_t = tf.summary.scalar("T generator-loss vali", t_gen_loss)
 
 		# discriminator output [0,1] for real input, during training
 		outTrain_disc_real_t = tf.summary.scalar("T discriminator-out train", t_disc_sigmoid)
 		# discriminator output [0,1] for generated input
 		outTrain_disc_gen_t = tf.summary.scalar("T generator-out train", t_gen_sigmoid)
 
-		# discriminator output [0,1] for real input, during testing
-		outTest_disc_real_t = tf.summary.scalar("T discriminator-out test", t_disc_sigmoid)
+		# discriminator output [0,1] for real input, during validation
+		outVali_disc_real_t = tf.summary.scalar("T discriminator-out vali", t_disc_sigmoid)
 		# discriminator output [0,1] for generated input
-		outTest_disc_gen_t = tf.summary.scalar("T generator-out test", t_gen_sigmoid)
+		outVali_disc_gen_t = tf.summary.scalar("T generator-out vali", t_gen_sigmoid)
 	
 	if (useTempoL2):  # all temporal losses
 		lossTrain_gen_t_l = tf.summary.scalar("T generator-loss train l2", tl_gen_loss)
-		lossTest_gen_t_l = tf.summary.scalar("T generator-loss test l2", tl_gen_loss)
+		lossVali_gen_t_l = tf.summary.scalar("T generator-loss vali l2", tl_gen_loss)
 
 	merged_summary_op = tf.summary.merge_all()
 	summary_writer    = tf.summary.FileWriter(test_path, sess.graph)
@@ -768,7 +768,7 @@ def getTempoinput(batch_size = 1, isTraining = True, useDataAugmentation = False
 	return batch_xts, batch_yts, batch_y_pos
 
 #evaluate the generator (sampler) on the first step of the first simulation and output result
-def generateTestImage(sim_no = fromSim, frame_no = 1, outPath = test_path,imageindex = 0):
+def generateValiImage(sim_no = fromSim, frame_no = 1, outPath = test_path,imageindex = 0):
 	if premadeTiles:
 		#todo output for premadetiles
 		pass
@@ -907,7 +907,7 @@ def saveModel(cost, exampleOut=-1, imgPath = test_path):
 	saver.save(sess, test_path + 'model_%04d.ckpt' % save_no)
 	msg = 'Saved Model %04d with cost %f.' % (save_no, cost)
 	if exampleOut > -1:
-		generateTestImage(imageindex = save_no, outPath = imgPath)
+		generateValiImage(imageindex = save_no, outPath = imgPath)
 	save_no += 1
 	return msg
 
@@ -918,7 +918,7 @@ if not load_model_test == -1:
 with open(basePath + 'test_overview.log', "a") as text_file:
 	if not outputOnly:
 		text_file.write(test_path[-10:-1] + ': {}D, \"{}\"\n'.format(dataDimension, note))
-		text_file.write('\t{} Epochs, gen: {}, disc: {}'.format(trainingEpochs, gen_model.__name__, disc_model.__name__) + loaded_model + '\n')
+		text_file.write('\t{} Iters, gen: {}, disc: {}'.format(trainingIters, gen_model.__name__, disc_model.__name__) + loaded_model + '\n')
 		text_file.write('\tgen-runs: {}, disc-runs: {}, lambda: {}, dropout: {:.4f}({:.4f})'.format(genRuns, discRuns, k, dropout, dropoutOutput) + '\n')
 	else:
 		text_file.write('Output:' + loaded_model + ' (' + test_path[-28:-1] + ')\n')
@@ -941,12 +941,12 @@ if not outputOnly and trainGAN:
 		avgOut_disc = 0
 		avgOut_gen = 0
 
-		avgTestCost_disc_real = 0
-		avgTestCost_disc_gen = 0
-		avgTestCost_gen = 0
-		avgTestOut_disc_real = 0
-		avgTestOut_disc_gen = 0
-		tests = 0
+		avgValiCost_disc_real = 0
+		avgValiCost_disc_gen = 0
+		avgValiCost_gen = 0
+		avgValiOut_disc_real = 0
+		avgValiOut_disc_gen = 0
+		validations = 0
 		startTime = time.time()
 		intervalTime = startTime
 		lastOut = 1
@@ -968,15 +968,15 @@ if not outputOnly and trainGAN:
 
 		avgOut_disc_t = 0
 		avgOut_gen_t = 0
-		avgTestCost_disc_real_t = 0
-		avgTestOut_disc_real_t = 0
-		avgTestCost_disc_gen_t = 0
-		avgTestOut_disc_gen_t = 0
-		avgTestCost_gen_t = 0
-		avgTestCost_gen_t_l = 0
+		avgValiCost_disc_real_t = 0
+		avgValiOut_disc_real_t = 0
+		avgValiCost_disc_gen_t = 0
+		avgValiOut_disc_gen_t = 0
+		avgValiCost_gen_t = 0
+		avgValiCost_gen_t_l = 0
 		
-		for epoch in range(trainingEpochs):
-			lrgs = max(0, epoch-(trainingEpochs//2)) # LR counter, start decay at half time... (if enabled) 
+		for iteration in range(trainingIters):
+			lrgs = max(0, iteration-(trainingIters//2)) # LR counter, start decay at half time... (if enabled) 
 			run_options = None; run_metadata = None
 			if saveMD:
 				run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
@@ -990,8 +990,8 @@ if not outputOnly and trainGAN:
 					batch_xs, batch_ys = getInput(batch_size = batch_size_disc, useDataAugmentation = useDataAugmentation, useVelocities = useVelocities, useVorticities = useVorticities)
 					_, disc_cost, summary,disc_sig,gen_sig = sess.run([disc_optimizer, disc_loss, lossTrain_disc,disc_sigmoid,gen_sigmoid], feed_dict={x: batch_xs, x_disc: batch_xs, y: batch_ys, keep_prob: dropout, train: True, lr_global_step: lrgs}     , options=run_options, run_metadata=run_metadata )
 					avgCost_disc += disc_cost
-					summary_writer.add_summary(summary, epoch)
-					if saveMD: summary_writer.add_run_metadata(run_metadata, 'dstep%d' % epoch)
+					summary_writer.add_summary(summary, iteration)
+					if saveMD: summary_writer.add_run_metadata(run_metadata, 'dstep%d' % iteration)
 
 			# temporal discriminator
 			if(useTempoD):
@@ -1002,7 +1002,7 @@ if not outputOnly and trainGAN:
 					_, t_disc_cost, summary, t_disc_sig, t_gen_sig = sess.run(
 						[t_disc_optimizer, t_disc_loss, lossTrain_disc_t, t_disc_sigmoid, t_gen_sigmoid], feed_dict=dict_train)
 					avgTemCost_disc += t_disc_cost
-					summary_writer.add_summary(summary, epoch)
+					summary_writer.add_summary(summary, iteration)
 					
 			# generator variables
 			for runs in range(genRuns):
@@ -1060,8 +1060,8 @@ if not outputOnly and trainGAN:
 				avgTemCost_gen_l += gen_tem_cost_l
 				if use_spatialdisc:
 					avgCost_gen += gen_cost
-					summary_writer.add_summary(summary, epoch)
-				if saveMD: summary_writer.add_run_metadata(run_metadata, 'gstep%d' % epoch)
+					summary_writer.add_summary(summary, iteration)
+				if saveMD: summary_writer.add_run_metadata(run_metadata, 'gstep%d' % iteration)
 
 
 			# save model
@@ -1074,71 +1074,71 @@ if not outputOnly and trainGAN:
 				lastSave += 1
 				saved = False
 
-			# test model
-			if (epoch + 1) % testInterval == 0:
+			# validate model
+			if (iteration + 1) % valiInterval == 0:
 				if use_spatialdisc:
 					# gather statistics from training
-					batch_xs, batch_ys = getInput(batch_size = numTests, useVelocities = useVelocities, useVorticities = useVorticities)
+					batch_xs, batch_ys = getInput(batch_size = numValis, useVelocities = useVelocities, useVorticities = useVorticities)
 					disc_out, summary_disc_out, gen_out, summary_gen_out = sess.run([disc_sigmoid, outTrain_disc_real, gen_sigmoid, outTrain_disc_gen], feed_dict={x: batch_xs, x_disc: batch_xs, y: batch_ys, keep_prob: dropout, train: False})
-					summary_writer.add_summary(summary_disc_out, epoch)
-					summary_writer.add_summary(summary_gen_out, epoch)
+					summary_writer.add_summary(summary_disc_out, iteration)
+					summary_writer.add_summary(summary_gen_out, iteration)
 					avgOut_disc += disc_out
 					avgOut_gen += gen_out
 
-					# testing starts here...
-					# get test data
-					batch_xs, batch_ys = getInput(batch_size = numTests, isTraining=False, useVelocities = useVelocities, useVorticities = useVorticities)
+					# validation starts here...
+					# get vali data
+					batch_xs, batch_ys = getInput(batch_size = numValis, isTraining=False, useVelocities = useVelocities, useVorticities = useVorticities)
 					#disc with real imput
-					disc_out_real, summary_test_out, disc_test_cost_real, summary_test = sess.run([disc_sigmoid, outTest_disc_real, disc_loss_disc, lossTest_disc_disc], feed_dict={x: batch_xs, x_disc: batch_xs, y: batch_ys, keep_prob: dropoutOutput, train: False})
-					summary_writer.add_summary(summary_test, epoch)
-					summary_writer.add_summary(summary_test_out, epoch)
-					avgTestCost_disc_real += disc_test_cost_real
-					avgTestOut_disc_real += disc_out_real
+					disc_out_real, summary_vali_out, disc_vali_cost_real, summary_vali = sess.run([disc_sigmoid, outVali_disc_real, disc_loss_disc, lossVali_disc_disc], feed_dict={x: batch_xs, x_disc: batch_xs, y: batch_ys, keep_prob: dropoutOutput, train: False})
+					summary_writer.add_summary(summary_vali, iteration)
+					summary_writer.add_summary(summary_vali_out, iteration)
+					avgValiCost_disc_real += disc_vali_cost_real
+					avgValiOut_disc_real += disc_out_real
 					#disc with generated input
-					disc_out_gen, summary_test_out, disc_test_cost_gen, summary_test = sess.run([gen_sigmoid, outTest_disc_gen, disc_loss_gen, lossTest_disc_gen], feed_dict={x: batch_xs, x_disc: batch_xs, keep_prob: dropoutOutput, train: False})
-					summary_writer.add_summary(summary_test, epoch)
-					summary_writer.add_summary(summary_test_out, epoch)
-					avgTestCost_disc_gen += disc_test_cost_gen
-					avgTestOut_disc_gen += disc_out_gen
+					disc_out_gen, summary_vali_out, disc_vali_cost_gen, summary_vali = sess.run([gen_sigmoid, outVali_disc_gen, disc_loss_gen, lossVali_disc_gen], feed_dict={x: batch_xs, x_disc: batch_xs, keep_prob: dropoutOutput, train: False})
+					summary_writer.add_summary(summary_vali, iteration)
+					summary_writer.add_summary(summary_vali_out, iteration)
+					avgValiCost_disc_gen += disc_vali_cost_gen
+					avgValiOut_disc_gen += disc_out_gen
 				
 				if(useTempoD): # temporal logs
 					# T disc output with training data
-					batch_xts, batch_yts, batch_y_pos = getTempoinput(numTests, useVelocities = useVelocities, useVorticities = useVorticities, n_t = 3, dt=dt, adv_flag = ADV_flag)
-					test_dict = {x_t: batch_xts, y_t: batch_yts, keep_prob: dropout, train: False}
+					batch_xts, batch_yts, batch_y_pos = getTempoinput(numValis, useVelocities = useVelocities, useVorticities = useVorticities, n_t = 3, dt=dt, adv_flag = ADV_flag)
+					vali_dict = {x_t: batch_xts, y_t: batch_yts, keep_prob: dropout, train: False}
 					if(ADV_flag):
-						test_dict[y_pos] = batch_y_pos
+						vali_dict[y_pos] = batch_y_pos
 					t_disc_out, summary_disc_out_t, t_gen_out, summary_gen_out_t = sess.run(
 						[t_disc_sigmoid, outTrain_disc_real_t, t_gen_sigmoid, outTrain_disc_gen_t],
-						feed_dict=test_dict)
-					summary_writer.add_summary(summary_disc_out_t, epoch)
-					summary_writer.add_summary(summary_gen_out_t, epoch)
+						feed_dict=vali_dict)
+					summary_writer.add_summary(summary_disc_out_t, iteration)
+					summary_writer.add_summary(summary_gen_out_t, iteration)
 					avgOut_disc_t += t_disc_out
 					avgOut_gen_t += t_gen_out
 
-					# test data
-					batch_xts, batch_yts, batch_y_pos = getTempoinput(numTests, isTraining=False, useVelocities = useVelocities, useVorticities = useVorticities, n_t = 3, dt=dt, adv_flag = ADV_flag)
+					# validation data
+					batch_xts, batch_yts, batch_y_pos = getTempoinput(numValis, isTraining=False, useVelocities = useVelocities, useVorticities = useVorticities, n_t = 3, dt=dt, adv_flag = ADV_flag)
 					# disc with real input
-					test_dict = {x_t: batch_xts, y_t: batch_yts, keep_prob: dropout, train: False}
+					vali_dict = {x_t: batch_xts, y_t: batch_yts, keep_prob: dropout, train: False}
 					if(ADV_flag):
-						test_dict[y_pos] = batch_y_pos
-					t_disc_out_real, summary_test_out_t, t_disc_test_cost_real, summary_test_t = sess.run(
-						[t_disc_sigmoid, outTest_disc_real_t, t_disc_loss_disc, lossTest_disc_disc_t],
-						feed_dict=test_dict)
-					summary_writer.add_summary(summary_test_t, epoch)
-					summary_writer.add_summary(summary_test_out_t, epoch)
-					avgTestCost_disc_real_t += t_disc_test_cost_real
-					avgTestOut_disc_real_t += t_disc_out_real
+						vali_dict[y_pos] = batch_y_pos
+					t_disc_out_real, summary_vali_out_t, t_disc_vali_cost_real, summary_vali_t = sess.run(
+						[t_disc_sigmoid, outVali_disc_real_t, t_disc_loss_disc, lossVali_disc_disc_t],
+						feed_dict=vali_dict)
+					summary_writer.add_summary(summary_vali_t, iteration)
+					summary_writer.add_summary(summary_vali_out_t, iteration)
+					avgValiCost_disc_real_t += t_disc_vali_cost_real
+					avgValiOut_disc_real_t += t_disc_out_real
 					# disc with generated input
-					test_dict = {x_t: batch_xts, y_t: batch_yts, keep_prob: dropout, train: False}
+					vali_dict = {x_t: batch_xts, y_t: batch_yts, keep_prob: dropout, train: False}
 					if(ADV_flag):
-						test_dict[y_pos] = batch_y_pos
-					t_disc_out_gen, summary_test_out_t, t_disc_test_cost_gen, summary_test_t = sess.run(
-						[t_gen_sigmoid, outTest_disc_gen_t, t_disc_loss_gen, lossTest_disc_gen_t],
-						feed_dict=test_dict)
-					summary_writer.add_summary(summary_test_t, epoch)
-					summary_writer.add_summary(summary_test_out_t, epoch)
-					avgTestCost_disc_gen_t += t_disc_test_cost_gen
-					avgTestOut_disc_gen_t += t_disc_out_gen
+						vali_dict[y_pos] = batch_y_pos
+					t_disc_out_gen, summary_vali_out_t, t_disc_vali_cost_gen, summary_vali_t = sess.run(
+						[t_gen_sigmoid, outVali_disc_gen_t, t_disc_loss_gen, lossVali_disc_gen_t],
+						feed_dict=vali_dict)
+					summary_writer.add_summary(summary_vali_t, iteration)
+					summary_writer.add_summary(summary_vali_out_t, iteration)
+					avgValiCost_disc_gen_t += t_disc_vali_cost_gen
+					avgValiOut_disc_gen_t += t_disc_out_gen
 					
 				#gen
 				train_dict = {x: batch_xs, x_disc: batch_xs, keep_prob: dropoutOutput, train: False}
@@ -1149,76 +1149,76 @@ if not outputOnly and trainGAN:
 					if (useTempoD):
 						train_dict[kkt] = kktin
 						if use_spatialdisc:
-							gen_test_cost, summary_test, gen_tem_cost, summary_test_gen \
-								= sess.run([gen_loss, lossTest_gen, t_gen_loss, lossTest_gen_t], feed_dict=train_dict)
+							gen_vali_cost, summary_vali, gen_tem_cost, summary_vali_gen \
+								= sess.run([gen_loss, lossVali_gen, t_gen_loss, lossVali_gen_t], feed_dict=train_dict)
 						else:
-							gen_tem_cost, summary_test_gen \
-								= sess.run([t_gen_loss, lossTest_gen_t], feed_dict=train_dict)
-						avgTestCost_gen_t += gen_tem_cost
+							gen_tem_cost, summary_vali_gen \
+								= sess.run([t_gen_loss, lossVali_gen_t], feed_dict=train_dict)
+						avgValiCost_gen_t += gen_tem_cost
 					if (useTempoL2):
 						train_dict[kktl] = kktin_l
 						if use_spatialdisc:
-							gen_test_cost, summary_test, gen_tem_cost, summary_test_gen \
-								= sess.run([gen_loss, lossTest_gen, tl_gen_loss, lossTest_gen_t_l], feed_dict=train_dict)
+							gen_vali_cost, summary_vali, gen_tem_cost, summary_vali_gen \
+								= sess.run([gen_loss, lossVali_gen, tl_gen_loss, lossVali_gen_t_l], feed_dict=train_dict)
 						else:
-							gen_tem_cost, summary_test_gen \
-								= sess.run([tl_gen_loss, lossTest_gen_t_l], feed_dict=train_dict)
-						avgTestCost_gen_t_l += gen_tem_cost
-					summary_writer.add_summary(summary_test_gen, epoch)
+							gen_tem_cost, summary_vali_gen \
+								= sess.run([tl_gen_loss, lossVali_gen_t_l], feed_dict=train_dict)
+						avgValiCost_gen_t_l += gen_tem_cost
+					summary_writer.add_summary(summary_vali_gen, iteration)
 
 				else:
 					if use_spatialdisc:
-						gen_test_cost, summary_test = sess.run([gen_loss, lossTest_gen], feed_dict=train_dict)
+						gen_vali_cost, summary_vali = sess.run([gen_loss, lossVali_gen], feed_dict=train_dict)
 				if use_spatialdisc:	
-					summary_writer.add_summary(summary_test, epoch)
-					avgTestCost_gen += gen_test_cost
+					summary_writer.add_summary(summary_vali, iteration)
+					avgValiCost_gen += gen_vali_cost
 
-				tests += 1
+				validations += 1
 
 			# output statistics
-			if (epoch + 1) % outputInterval == 0:
-				#training average costs
+			if (iteration + 1) % outputInterval == 0:
+				# training average costs
 				avgCost_disc /= (outputInterval * discRuns)
 				avgCost_gen /= (outputInterval * genRuns)
 				avgL1Cost_gen /= (outputInterval * genRuns)
-				#test average costs
-				if not (tests == 0):
-					avgOut_disc /= tests
-					avgOut_gen /= tests
-					avgTestCost_disc_real /= tests
-					avgTestCost_disc_gen /= tests
-					avgTestCost_gen /= tests
-					avgTestOut_disc_real /= tests
-					avgTestOut_disc_gen /= tests
+				# validation average costs
+				if not (validations == 0):
+					avgOut_disc /= validations
+					avgOut_gen /= validations
+					avgValiCost_disc_real /= validations
+					avgValiCost_disc_gen /= validations
+					avgValiCost_gen /= validations
+					avgValiOut_disc_real /= validations
+					avgValiOut_disc_gen /= validations
 					
 				if(useTempoD):
 					avgTemCost_gen /= (outputInterval * genRuns)
 					avgTemCost_disc /= (outputInterval * discRuns)
-					if( not tests == 0):
-						avgOut_disc_t /= tests
-						avgOut_gen_t /= tests
-						avgTestCost_disc_real_t /= tests
-						avgTestOut_disc_real_t /= tests
-						avgTestCost_disc_gen_t /= tests
-						avgTestOut_disc_gen_t /= tests
-						avgTestCost_gen_t /= tests
+					if( not validations == 0):
+						avgOut_disc_t /= validations
+						avgOut_gen_t /= validations
+						avgValiCost_disc_real_t /= validations
+						avgValiOut_disc_real_t /= validations
+						avgValiCost_disc_gen_t /= validations
+						avgValiOut_disc_gen_t /= validations
+						avgValiCost_gen_t /= validations
 						
 				if (useTempoL2):
 					avgTemCost_gen_l /= (outputInterval * genRuns)
-					if (not tests == 0):
-						avgTestCost_gen_t_l /= tests
+					if (not validations == 0):
+						avgValiCost_gen_t_l /= validations
 						
-				print('\nEpoch {:05d}/{}, Cost:'.format((epoch + 1), trainingEpochs))
-				print('\tdisc: loss: train_loss={:.6f} - test-real={:.6f} - test-generated={:.6f}, out: train={:.6f} - test={:.6f}'.
-					format(avgCost_disc, avgTestCost_disc_real, avgTestCost_disc_gen, avgOut_disc, avgTestOut_disc_real))
-				print('\tT D : loss[ -train (total={:.6f}), -test (real&1={:.6f}) (generated&0={:.6f})]'.
-					format(avgTemCost_disc, avgTestCost_disc_real_t, avgTestCost_disc_gen_t))
-				print('\t	sigmoidout[ -test (real&1={:.6f}) (generated&0={:.6f})'.
-					format(avgTestOut_disc_real_t, avgTestOut_disc_gen_t))
-				print('\t gen: loss: train={:.6f} - L1(*k)={:.3f} - test={:.6f}, DS out: train={:.6f} - test={:.6f}'
-					.format(avgCost_gen, avgL1Cost_gen * k, avgTestCost_gen, avgOut_gen, avgTestOut_disc_gen))
-				print('\t gen: loss[ -train (total Temp(*k)={:.6f}) -test (total Temp(*k)={:.6f})], DT out: real={:.6f} - gen={:.6f}'
-					.format(avgTemCost_gen * kt, avgTestCost_gen_t * kt, avgOut_disc_t, avgOut_gen_t))
+				print('\nIter {:05d}/{}, Cost:'.format((iteration + 1), trainingIters))
+				print('\tdisc: loss: train_loss={:.6f} - vali-real={:.6f} - vali-generated={:.6f}, out: train={:.6f} - vali={:.6f}'.
+					format(avgCost_disc, avgValiCost_disc_real, avgValiCost_disc_gen, avgOut_disc, avgValiOut_disc_real))
+				print('\tT D : loss[ -train (total={:.6f}), -vali (real&1={:.6f}) (generated&0={:.6f})]'.
+					format(avgTemCost_disc, avgValiCost_disc_real_t, avgValiCost_disc_gen_t))
+				print('\t	sigmoidout[ -vali (real&1={:.6f}) (generated&0={:.6f})'.
+					format(avgValiOut_disc_real_t, avgValiOut_disc_gen_t))
+				print('\t gen: loss: train={:.6f} - L1(*k)={:.3f} - vali={:.6f}, DS out: train={:.6f} - vali={:.6f}'
+					.format(avgCost_gen, avgL1Cost_gen * k, avgValiCost_gen, avgOut_gen, avgValiOut_disc_gen))
+				print('\t gen: loss[ -train (total Temp(*k)={:.6f}) -vali (total Temp(*k)={:.6f})], DT out: real={:.6f} - gen={:.6f}'
+					.format(avgTemCost_gen * kt, avgValiCost_gen_t * kt, avgOut_disc_t, avgOut_gen_t))
 				if use_spatialdisc:
 					print('\tdisc: loss: disc=%f'%(disc_sig))
 					print('\tgen: loss: gen=%f'%(gen_sig))
@@ -1230,17 +1230,17 @@ if not outputOnly and trainGAN:
 				
 				if(useTempoD): print('\t tempo_cost: %f' % (gen_tem_cost))
 				print('\t l1_cost: %f'%(gen_l1_cost))
-				print('\t l2 tempo loss[ -train (total Temp(*k)={:.6f}) -test (total Temp(*k)={:.6f})]'
-					.format(avgTemCost_gen_l * kt_l, avgTestCost_gen_t_l * kt_l))
+				print('\t l2 tempo loss[ -train (total Temp(*k)={:.6f}) -vali (total Temp(*k)={:.6f})]'
+					.format(avgTemCost_gen_l * kt_l, avgValiCost_gen_t_l * kt_l))
 				
-				epochTime = (time.time() - startTime) / (epoch + 1)
-				print('\t{} epochs took {:.2f} seconds. (Est. next: {})'.format(outputInterval, (time.time() - intervalTime), time.ctime(time.time() + outputInterval * epochTime)))
-				remainingTime = (trainingEpochs - epoch) * epochTime
+				iterTime = (time.time() - startTime) / (iteration + 1)
+				print('\t{} Iterations took {:.2f} seconds. (Est. next: {})'.format(outputInterval, (time.time() - intervalTime), time.ctime(time.time() + outputInterval * iterTime)))
+				remainingTime = (trainingIters - iteration) * iterTime
 				print('\tEstimated remaining time: {:.2f} minutes. (Est. end: {})'.format(remainingTime / 60.0, time.ctime(time.time() + remainingTime)))
 				if saved:
 					print('\t' + saveMsg) # print save massage here for clarity
-				if genTestImg > -1:
-					generateTestImage(outPath = test_path+'test_img/', imageindex = image_no)
+				if genValiImg > -1:
+					generateValiImage(outPath = test_path+'test_img/', imageindex = image_no)
 					image_no +=1
 				sys.stdout.flush()
 				intervalTime = time.time()
@@ -1249,12 +1249,12 @@ if not outputOnly and trainGAN:
 				avgL1Cost_gen = 0
 				avgOut_disc = 0
 				avgOut_gen = 0
-				avgTestCost_disc_real = 0
-				avgTestCost_disc_gen = 0
-				avgTestCost_gen = 0
-				avgTestOut_disc_real = 0
-				avgTestOut_disc_gen = 0
-				tests = 0
+				avgValiCost_disc_real = 0
+				avgValiCost_disc_gen = 0
+				avgValiCost_gen = 0
+				avgValiOut_disc_real = 0
+				avgValiOut_disc_gen = 0
+				validations = 0
 				lastOut = 0
 				
 				if(useTempoD):
@@ -1262,15 +1262,15 @@ if not outputOnly and trainGAN:
 					avgTemCost_disc = 0
 					avgOut_disc_t = 0
 					avgOut_gen_t = 0
-					avgTestCost_disc_real_t = 0
-					avgTestOut_disc_real_t = 0
-					avgTestCost_disc_gen_t = 0
-					avgTestOut_disc_gen_t = 0
-					avgTestCost_gen_t = 0
+					avgValiCost_disc_real_t = 0
+					avgValiOut_disc_real_t = 0
+					avgValiCost_disc_gen_t = 0
+					avgValiOut_disc_gen_t = 0
+					avgValiCost_gen_t = 0
 					
 				if (useTempoL2):
 					avgTemCost_gen_l = 0
-					avgTestCost_gen_t_l = 0
+					avgValiCost_gen_t_l = 0
 
 			lastOut +=1
 
@@ -1278,7 +1278,7 @@ if not outputOnly and trainGAN:
 		print("training interrupted")
 		sys.stdout.flush()
 		with open(basePath + 'test_overview.log', "a") as text_file:
-			text_file.write('\ttraining interrupted after %d epochs' % (epoch + 1) + '\n')
+			text_file.write('\ttraining interrupted after %d iters' % (iteration + 1) + '\n')
 
 	print('\n*****TRAINING FINISHED*****')
 	training_duration = (time.time() - startTime) / 60.0
@@ -1297,7 +1297,7 @@ elif outputOnly:
 	for layerno in range(0,frameMax-frameMin):
 		print('Generating %d' % (layerno))
 		if dataDimension == 2:
-			generateTestImage(fromSim,layerno,outPath = test_path, imageindex = layerno)
+			generateValiImage(fromSim,layerno,outPath = test_path, imageindex = layerno)
 		else:
 			generate3DUni(fromSim,layerno,outPath = test_path, imageindex = layerno)
 
