@@ -29,6 +29,11 @@ And two data directories were ouputs will be written:
 ## Compilation
 First, compile mantaflow with numpy support (as usual), follow 
 http://mantaflow.com/install.html.
+One difference is, in the CMake settings, numpy shoule be enabled: 
+"cmake .. -DGUI=ON -DOPENMP=ON -DNUMPY=ON".
+Note that if mantaflow is installed on a remote server, GUI is not supported, i.e.:
+"cmake .. -DGUI=OFF -DOPENMP=ON -DNUMPY=ON".
+
 All of the following scripts assume that you execute them 
 from the mantaflow/tensorflow/tempoGAN/ directory (they often
 use relative paths).
