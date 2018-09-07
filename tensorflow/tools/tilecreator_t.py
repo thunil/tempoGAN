@@ -103,8 +103,12 @@ class TileCreator(object):
 		if upres < 1:
 			self.TCError('Upres must be at least 1.')
 		self.upres = upres
-		self.tileSizeHigh = self.tileSizeLow*upres
-		self.simSizeHigh = self.simSizeLow*upres
+		if not highIsLabel:
+			self.tileSizeHigh = self.tileSizeLow*upres
+			self.simSizeHigh = self.simSizeLow*upres
+		else:
+			self.tileSizeHigh = np.asarray([1])
+			self.simSizeHigh = np.asarray([1])
 		
 		if self.dim==2:
 			self.tileSizeLow[0]=1
@@ -124,6 +128,7 @@ class TileCreator(object):
 		#CHANNELS
 		self.c_lists = {}
 		self.c_low, self.c_lists[DATA_KEY_LOW] = self.parseChannels(channelLayout_low)
+		self.c_high, self.c_lists[DATA_KEY_HIGH] = self.parseChannels(channelLayout_high)
 
 		# print info
 		print('Dimension: {}, time dimension: {}'.format(self.dim,self.dim_t))
@@ -134,7 +139,6 @@ class TileCreator(object):
 			print('  velocity channels: {}'.format(self.c_lists[DATA_KEY_LOW][C_KEY_VELOCITY]))
 		if len(self.c_lists[DATA_KEY_LOW][C_KEY_VORTICITY])>0: 
 			print('  vorticity channels: {}'.format(self.c_lists[DATA_KEY_LOW][C_KEY_VORTICITY]))
-		self.c_high, self.c_lists[DATA_KEY_HIGH] = self.parseChannels(channelLayout_high)
 		print('High-res data:')
 		print('  channel layout: {}'.format(self.c_high))
 		print('  default channels: {}'.format(self.c_lists[DATA_KEY_HIGH][C_KEY_DEFAULT]))
@@ -170,9 +174,13 @@ class TileCreator(object):
 		
 		#DATA SHAPES
 		self.tile_shape_low = np.append(self.tileSizeLow, [self.data_flags[DATA_KEY_LOW]['channels']])
-		self.tile_shape_high = np.append(self.tileSizeHigh, [self.data_flags[DATA_KEY_HIGH]['channels']])
 		self.frame_shape_low = np.append(self.simSizeLow, [self.data_flags[DATA_KEY_LOW]['channels']])
-		self.frame_shape_high = np.append(self.simSizeHigh, [self.data_flags[DATA_KEY_HIGH]['channels']])
+		if not self.data_flags[DATA_KEY_HIGH]['isLabel']:
+			self.tile_shape_high = np.append(self.tileSizeHigh, [self.data_flags[DATA_KEY_HIGH]['channels']])
+			self.frame_shape_high = np.append(self.simSizeHigh, [self.data_flags[DATA_KEY_HIGH]['channels']])
+		else:
+			self.tile_shape_high = self.tileSizeHigh[:]
+			self.frame_shape_high = self.simSizeHigh[:]
 		
 		self.densityThreshold = (self.densityMinimum * self.tile_shape_low[0] * self.tile_shape_low[1] * self.tile_shape_low[2])
 
@@ -290,14 +298,16 @@ class TileCreator(object):
 		low = np.asarray(low)
 		high = np.asarray(high)
 		
-		if len(low.shape)!=len(high.shape): #high-low mismatch
+		if not self.data_flags[DATA_KEY_HIGH]['isLabel']:
+			if len(low.shape)!=len(high.shape): #high-low mismatch
 			self.TCError('Data shape mismatch. Dimensions: %d vs %d'%(len(low.shape),len(high.shape)) )
 		if not (len(low.shape)==4 or len(low.shape)==5): #not single frame or sequence of frames
 			self.TCError('Input must be single 3D data or sequence of 3D data.')
 
 		if (low.shape[-1]!=self.dim_t * self.data_flags[DATA_KEY_LOW]['channels']):
 			self.TCError('(Dim_t * Channels) configured for tilecreator (low-res) don\'t match (channels) of data: '+ format( [ low.shape[-1] , self.dim_t, self.data_flags[DATA_KEY_LOW]['channels'] ]) )
-		if (high.shape[-1]!=self.dim_t * self.data_flags[DATA_KEY_HIGH]['channels']):
+		if not self.data_flags[DATA_KEY_HIGH]['isLabel']:
+			if (high.shape[-1]!=self.dim_t * self.data_flags[DATA_KEY_HIGH]['channels']):
 			self.TCError('(Dim_t * Channels) configured for tilecreator (high-res) don\'t match channels of data: '+ format( [high.shape[-1], self.dim_t, self.data_flags[DATA_KEY_HIGH]['channels'] ]) )
 		
 		low_shape = low.shape
@@ -307,7 +317,8 @@ class TileCreator(object):
 				self.TCError('unequal amount of low ({}) and high ({}) data.'.format(low.shape[1], high.shape[1]))
 			# get single data shape
 			low_shape = low_shape[1:]
-			high_shape = high_shape[1:]
+			if not self.data_flags[DATA_KEY_HIGH]['isLabel']:
+				high_shape = high_shape[1:]
 		else: #single
 			low = [low]
 			high = [high]
@@ -321,7 +332,8 @@ class TileCreator(object):
 			single_frame_low_shape = list(low_shape)
 			single_frame_high_shape = list(high_shape)
 			single_frame_low_shape[-1] = low_shape[-1] // self.dim_t
-			single_frame_high_shape[-1] = high_shape[-1] // self.dim_t
+			if not self.data_flags[DATA_KEY_HIGH]['isLabel']:
+				single_frame_high_shape[-1] = high_shape[-1] // self.dim_t
 			
 			if not np.array_equal(single_frame_low_shape, self.frame_shape_low) or not np.array_equal(single_frame_high_shape,self.frame_shape_high):
 				self.TCError('Frame shape mismatch: is - specified\n\tlow: {} - {}\n\thigh {} - {}, given dim_t as {}'.format(single_frame_low_shape, self.frame_shape_low, single_frame_high_shape,self.frame_shape_high, self.dim_t))
@@ -492,7 +504,7 @@ class TileCreator(object):
 		target_shape_low[-1] *= tile_t
 		target_shape_high[-1] *= tile_t
 		
-		if not np.array_equal(data[DATA_KEY_LOW].shape,target_shape_low) or not np.array_equal(data[DATA_KEY_HIGH].shape,target_shape_high):
+		if not np.array_equal(data[DATA_KEY_LOW].shape,target_shape_low) or (not np.array_equal(data[DATA_KEY_HIGH].shape,target_shape_high) and not self.data_flags[DATA_KEY_HIGH]['isLabel']):
 			self.TCError('Wrong tile shape after data augmentation. is: {},{}. goal: {},{}.'.format(data[DATA_KEY_LOW].shape, data[DATA_KEY_HIGH].shape, target_shape_low, target_shape_high))
 		
 		return data[DATA_KEY_LOW], data[DATA_KEY_HIGH]
@@ -522,7 +534,10 @@ class TileCreator(object):
 			begin_ch_y = (index % self.dim_t) * self.tile_shape_high[-1]
 		end_c_h_y = begin_ch_y + tile_t * self.tile_shape_high[-1]
 		
-		return np.copy(self.data[DATA_KEY_LOW][index//self.dim_t][:,:,:,begin_ch:end_ch]), np.copy(self.data[DATA_KEY_HIGH][index//self.dim_t][:,:,:,begin_ch_y:end_c_h_y])
+		if not self.data_flags[DATA_KEY_HIGH]['isLabel']:
+			return np.copy(self.data[DATA_KEY_LOW][index//self.dim_t][:,:,:,begin_ch:end_ch]), np.copy(self.data[DATA_KEY_HIGH][index//self.dim_t][:,:,:,begin_ch_y:end_c_h_y])
+		else:
+			return np.copy(self.data[DATA_KEY_LOW][index//self.dim_t][:,:,:,begin_ch:end_ch]), np.copy(self.data[DATA_KEY_HIGH][index//self.dim_t])
 
 
 	def getRandomTile(self, low, high, tileShapeLow=None, bounds=[0,0,0,0]): #bounds to avoid mirrored parts
@@ -536,7 +551,9 @@ class TileCreator(object):
 		tileShapeHigh = tileShapeLow*self.upres
 		
 		frameShapeLow = np.asarray(low.shape)
-		if len(low.shape)!=4 or len(high.shape)!=4 or len(tileShapeLow)!=4:
+		if len(low.shape)!=4 or len(tileShapeLow)!=4:
+			self.TCError('Data shape mismatch.')
+		if  len(high.shape)!=4 and not self.data_flags[DATA_KEY_HIGH]['isLabel']:
 			self.TCError('Data shape mismatch.')
 
 		start = np.ceil(bounds)
@@ -578,12 +595,13 @@ class TileCreator(object):
 			wrapper to call the augmentation operations specified in self.aops in initAugmentation
 		"""
 		for data_key in data:
+			if self.data_flags[data_key]['isLabel']: continue
 			orig_shape = data[data_key].shape
 			tile_t = orig_shape[-1] // self.data_flags[data_key]['channels']
 			data_array = data[data_key]
 			if(tile_t > 1): data_array = data[data_key].reshape( (-1, tile_t, self.data_flags[data_key]['channels']) )
 			for c_key, op in self.aops[data_key][ops_key].items():
-				if self.data_flags[data_key][c_key] and not self.data_flags[data_key]['isLabel']:
+				if self.data_flags[data_key][c_key]:
 					data_array = op(data_array, self.c_lists[data_key][c_key], param)
 			if (tile_t > 1): data[data_key] = data_array.reshape(orig_shape)
 		return data
@@ -906,7 +924,10 @@ class TileCreator(object):
 				self.TCError('missing velocity channel with label \"{}\".'.format(label))
 			
 			if c[i][-1] == 'x':
-				c_types[C_KEY_VELOCITY].append([c.index(vel_x),c.index(vel_y),c.index(vel_z)])
+				if(c.count(vel_z)==0 and self.dim==2):
+					c_types[C_KEY_VELOCITY].append([c.index(vel_x),c.index(vel_y)])
+				else:
+					c_types[C_KEY_VELOCITY].append([c.index(vel_x),c.index(vel_y),c.index(vel_z)])
 		# check wrong postfix
 		else:
 			self.TCError('channel {}: unknown channel key \"{}\".'.format(i, c[i]))
@@ -930,7 +951,10 @@ class TileCreator(object):
 				self.TCError('missing velocity channel with label \"{}\".'.format(label))
 			
 			if c[i][-1] == 'x':
-				c_types[C_KEY_VORTICITY].append([c.index(vel_x),c.index(vel_y),c.index(vel_z)])
+				if(c.count(vel_z)==0 and self.dim==2):
+					c_types[C_KEY_VORTICITY].append([c.index(vel_x),c.index(vel_y)])
+				else:
+					c_types[C_KEY_VORTICITY].append([c.index(vel_x),c.index(vel_y),c.index(vel_z)])
 		# check wrong postfix
 		else:
 			self.TCError('channel {}: unknown channel key \"{}\".'.format(i, c[i]))
@@ -999,7 +1023,7 @@ def savePngsBatch(low,high, TC, path, batchCounter=-1, save_vels=False, dscale=1
 
 
 # simpler function to output multiple tiles into grayscale pngs
-def savePngsGrayscale(tiles, path, imageCounter=0, tiles_in_image=[1,1], channels=[0], save_gif=False, plot_vel_x_y=False):
+def savePngsGrayscale(tiles, path, imageCounter=0, tiles_in_image=[1,1], channels=[0], save_gif=False, plot_vel_x_y=False, save_rgb=None, rgb_interval=[-1,1]):
 	'''
 		tiles_in_image: (y,x)
 		tiles: shape: (tile,y,x,c)
@@ -1022,9 +1046,9 @@ def savePngsGrayscale(tiles, path, imageCounter=0, tiles_in_image=[1,1], channel
 		img = np.concatenate(img, axis=0) #combine y
 		# move channels to first dim.
 		img_c = np.rollaxis(img, -1, 0)
-		if len(img_c)>2 and plot_vel_x_y:
-			scipy.misc.toimage(img_c[0], cmin=0.0, cmax=1.0).save(path + 'img_{:04d}.png'.format(imageCounter+image))
-			saveVel(img, path, imageCounter+image)
+		if len(img_c)>1 and (plot_vel_x_y or save_rgb!=None):
+			if plot_vel_x_y: saveVel(img, path, imageCounter+image)
+			if save_rgb!=None: saveRGBChannels(img,path, save_rgb,value_interval=rgb_interval, imageCounter=imageCounter+image)
 		else:
 			if len(channels) == 1:
 				scipy.misc.toimage(img_c[channels[0]], cmin=0.0, cmax=1.0).save(path + 'img_{:04d}.png'.format(imageCounter*noImages+image))
@@ -1086,17 +1110,22 @@ def saveVelChannels(data, c_idx, path, average=False, scale=1.0, normalize=True,
 			saveVel(vavg, path=vpath, name='_yz' )
 
 
-def saveRGBChannels(data, path, channel_list, imageCounter=0):
+def saveRGBChannels(data, path, channel_list, imageCounter=0, value_interval=[-1,1]):
 	"""
 		data: shape[y,x,c]
 		channels: list of triples of channel ids saved as RGB image
 	"""
 
+	cmin = value_interval[0]
+	cmax = value_interval[1]
 	num_channels = data.shape[-1]
 	
 	channels = np.split(data, num_channels, -1)
 	for i in channel_list:
-		img = np.concatenate([channels[i[0]], channels[i[1]], channels[i[2]]], -1)
+		if len(i)==2:
+			img = np.concatenate([channels[i[0]], channels[i[1]], np.ones_like(channels[i[0]])*cmin], -1)
+		else:
+			img = np.concatenate([channels[i[0]], channels[i[1]], channels[i[2]]], -1)
 		scipy.misc.toimage(img, cmin=-1.0, cmax=1.0).save(path + 'img_rgb_{:04d}.png'.format(imageCounter))
 
 def save3DasUni(tiles, path, motherUniPath, imageCounter=0, tiles_in_image=[1,1]):
