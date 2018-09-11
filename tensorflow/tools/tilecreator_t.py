@@ -131,6 +131,7 @@ class TileCreator(object):
 		self.c_high, self.c_lists[DATA_KEY_HIGH] = self.parseChannels(channelLayout_high)
 
 		# print info
+		print('\n')
 		print('Dimension: {}, time dimension: {}'.format(self.dim,self.dim_t))
 		print('Low-res data:')
 		print('  channel layout: {}'.format(self.c_low))
@@ -140,6 +141,8 @@ class TileCreator(object):
 		if len(self.c_lists[DATA_KEY_LOW][C_KEY_VORTICITY])>0: 
 			print('  vorticity channels: {}'.format(self.c_lists[DATA_KEY_LOW][C_KEY_VORTICITY]))
 		print('High-res data:')
+		if highIsLabel:
+			print('  is Label')
 		print('  channel layout: {}'.format(self.c_high))
 		print('  default channels: {}'.format(self.c_lists[DATA_KEY_HIGH][C_KEY_DEFAULT]))
 		if len(self.c_lists[DATA_KEY_HIGH][C_KEY_VELOCITY])>0: 
@@ -300,25 +303,26 @@ class TileCreator(object):
 		
 		if not self.data_flags[DATA_KEY_HIGH]['isLabel']:
 			if len(low.shape)!=len(high.shape): #high-low mismatch
-			self.TCError('Data shape mismatch. Dimensions: %d vs %d'%(len(low.shape),len(high.shape)) )
+				self.TCError('Data shape mismatch. Dimensions: {} low vs {} high. Dimensions must match or use highIsLabel.'.format(len(low.shape),len(high.shape)) )
 		if not (len(low.shape)==4 or len(low.shape)==5): #not single frame or sequence of frames
-			self.TCError('Input must be single 3D data or sequence of 3D data.')
+			self.TCError('Input must be single 3D data or sequence of 3D data. Format: ([batch,] z, y, x, channels). For 2D use z=1.')
 
-		if (low.shape[-1]!=self.dim_t * self.data_flags[DATA_KEY_LOW]['channels']):
-			self.TCError('(Dim_t * Channels) configured for tilecreator (low-res) don\'t match (channels) of data: '+ format( [ low.shape[-1] , self.dim_t, self.data_flags[DATA_KEY_LOW]['channels'] ]) )
+		if (low.shape[-1]!=(self.dim_t * self.data_flags[DATA_KEY_LOW]['channels'])):
+			self.TCError('Dim_t ({}) * Channels ({}, {}) configured for LOW-res data don\'t match channels ({}) of input data.'.format(self.dim_t, self.data_flags[DATA_KEY_LOW]['channels'], self.c_low,  low.shape[-1]) )
 		if not self.data_flags[DATA_KEY_HIGH]['isLabel']:
-			if (high.shape[-1]!=self.dim_t * self.data_flags[DATA_KEY_HIGH]['channels']):
-			self.TCError('(Dim_t * Channels) configured for tilecreator (high-res) don\'t match channels of data: '+ format( [high.shape[-1], self.dim_t, self.data_flags[DATA_KEY_HIGH]['channels'] ]) )
+			if (high.shape[-1]!=(self.dim_t * self.data_flags[DATA_KEY_HIGH]['channels'])):
+				self.TCError('Dim_t ({}) * Channels ({}, {}) configured for HIGH-res data don\'t match channels ({}) of input data.'.format(self.dim_t, self.data_flags[DATA_KEY_HIGH]['channels'], self.c_high, high.shape[-1]) )
 		
 		low_shape = low.shape
 		high_shape = high.shape
 		if len(low.shape)==5: #sequence
 			if low.shape[0]!=high.shape[0]: #check amount
-				self.TCError('unequal amount of low ({}) and high ({}) data.'.format(low.shape[1], high.shape[1]))
+				self.TCError('Unequal amount of low ({}) and high ({}) data.'.format(low.shape[1], high.shape[1]))
 			# get single data shape
 			low_shape = low_shape[1:]
 			if not self.data_flags[DATA_KEY_HIGH]['isLabel']:
 				high_shape = high_shape[1:]
+			else: high_shape = [1]
 		else: #single
 			low = [low]
 			high = [high]
@@ -336,11 +340,13 @@ class TileCreator(object):
 				single_frame_high_shape[-1] = high_shape[-1] // self.dim_t
 			
 			if not np.array_equal(single_frame_low_shape, self.frame_shape_low) or not np.array_equal(single_frame_high_shape,self.frame_shape_high):
-				self.TCError('Frame shape mismatch: is - specified\n\tlow: {} - {}\n\thigh {} - {}, given dim_t as {}'.format(single_frame_low_shape, self.frame_shape_low, single_frame_high_shape,self.frame_shape_high, self.dim_t))
+				self.TCError('Frame shape mismatch: is - specified\n\tlow: {} - {}\n\thigh: {} - {}, given dim_t as {}'.format(single_frame_low_shape, self.frame_shape_low, single_frame_high_shape,self.frame_shape_high, self.dim_t))
 
 		self.data[DATA_KEY_LOW].extend(low)
 		self.data[DATA_KEY_HIGH].extend(high)
 		
+		print('\n')
+		print('Added {} datasets. Total: {}'.format(low.shape[0], len(self.data[DATA_KEY_LOW])))
 		self.splitSets()
 	
 	def splitSets(self):
@@ -434,7 +440,7 @@ class TileCreator(object):
 			if (self.setBorders[1] - self.setBorders[0])<1:
 				self.TCError('no test data.')
 		if(tile_t > self.dim_t):
-			self.TCError('not enough coherent frames. Requested {}, given {}'.format(tile_t, self.dim_t))
+			self.TCError('not enough coherent frames. Requested {}, available {}'.format(tile_t, self.dim_t))
 		batch_low = []
 		batch_high = []
 		for i in range(selectionSize):
@@ -904,60 +910,52 @@ class TileCreator(object):
 			c_types[C_KEY_DEFAULT].append(i)
 		else:
 			self.TCError('channel {}: unknown channel key \"{}\".'.format(i, c[i]))
+			
+	def parseCVector(self, c, i, c_types, c_key, c_name='vector'):
+		# c_key[label](x|y|z)
+		if c[i][-1] == 'x' or c[i][-1] == 'y' or c[i][-1] == 'z':
+			label = c[i][1:-1] #can be empty
+			
+			#get matching keys
+			v_x = c_key+label+'x'
+			v_y = c_key+label+'y'
+			v_z = c_key+label+'z'
+			
+			#check for duplicates
+			if c.count(v_x)>1:
+				self.TCError('Duplicate {} ({}) x-channel with label \"{}\": {}. Vector keys must be unique.'.format(c_name, c_key, label, v_x))
+			if c.count(v_y)>1:
+				self.TCError('Duplicate {} ({}) y-channel with label \"{}\": {}. Vector keys must be unique.'.format(c_name, c_key, label, v_y))
+			if c.count(v_z)>1:
+				self.TCError('Duplicate {} ({}) z-channel with label \"{}\": {}. Vector keys must be unique.'.format(c_name, c_key, label, v_z))
+			
+			#check missing
+			if c.count(v_x)==0:
+				self.TCError('Missing {} ({}) x-channel with label \"{}\": {}'.format(c_name, c_key, label, v_x))
+			if c.count(v_y)==0:
+				self.TCError('Missing {} ({}) y-channel with label \"{}\": {}'.format(c_name, c_key, label, v_y))
+			if self.dim==3 and c.count(v_z)==0:
+				self.TCError('Missing {} ({}) z-channel with label \"{}\": {}'.format(c_name, c_key, label, v_z))
+			
+			if c[i][-1] == 'x':
+				if(c.count(v_z)==0 and self.dim==2):
+					c_types[C_KEY_VELOCITY].append([c.index(v_x),c.index(v_y)])
+				else:
+					c_types[C_KEY_VELOCITY].append([c.index(v_x),c.index(v_y),c.index(v_z)])
+		
+		# check wrong suffix
+		else:
+			self.TCError('Channel {}, \"{}\": unknown {} ({}) channel suffix \"{}\". Valid suffixes are \"x\", \"y\", \"z\".'.format(i, c[i], c_name, c_key, c[i][-1]))
+			
+		
 	
 	def parseCVelocity(self, c, i, c_types):
 		# C_KEY_VELOCITY[label](x|y|z)
-		if c[i][-1] == 'x' or c[i][-1] == 'y' or c[i][-1] == 'z':
-			label = c[i][1:-1] #can be empty
-			
-			#get matching keys
-			vel_x = C_KEY_VELOCITY+label+'x'
-			vel_y = C_KEY_VELOCITY+label+'y'
-			vel_z = C_KEY_VELOCITY+label+'z'
-			
-			#check for duplicates
-			if c.count(vel_x)>1 or c.count(vel_y)>1 or c.count(vel_z)>1:
-				self.TCError('duplicate velocity channel with label \"{}\".'.format(label))
-			
-			#check missing
-			if c.count(vel_x)==0 or c.count(vel_y)==0 or (self.dim==3 and c.count(vel_z)==0):
-				self.TCError('missing velocity channel with label \"{}\".'.format(label))
-			
-			if c[i][-1] == 'x':
-				if(c.count(vel_z)==0 and self.dim==2):
-					c_types[C_KEY_VELOCITY].append([c.index(vel_x),c.index(vel_y)])
-				else:
-					c_types[C_KEY_VELOCITY].append([c.index(vel_x),c.index(vel_y),c.index(vel_z)])
-		# check wrong postfix
-		else:
-			self.TCError('channel {}: unknown channel key \"{}\".'.format(i, c[i]))
+		self.parseCVector(c, i, c_types, C_KEY_VELOCITY, 'velociy')
 	
 	def parseCVorticity(self, c, i, c_types):
 		# C_KEY_VELOCITY[label](x|y|z)
-		if c[i][-1] == 'x' or c[i][-1] == 'y' or c[i][-1] == 'z':
-			label = c[i][1:-1] #can be empty
-			
-			#get matching keys
-			vel_x = C_KEY_VORTICITY+label+'x'
-			vel_y = C_KEY_VORTICITY+label+'y'
-			vel_z = C_KEY_VORTICITY+label+'z'
-			
-			#check for duplicates
-			if c.count(vel_x)>1 or c.count(vel_y)>1 or c.count(vel_z)>1:
-				self.TCError('duplicate velocity channel with label \"{}\".'.format(label))
-			
-			#check missing
-			if c.count(vel_x)==0 or c.count(vel_y)==0 or (self.dim==3 and c.count(vel_z)==0):
-				self.TCError('missing velocity channel with label \"{}\".'.format(label))
-			
-			if c[i][-1] == 'x':
-				if(c.count(vel_z)==0 and self.dim==2):
-					c_types[C_KEY_VORTICITY].append([c.index(vel_x),c.index(vel_y)])
-				else:
-					c_types[C_KEY_VORTICITY].append([c.index(vel_x),c.index(vel_y),c.index(vel_z)])
-		# check wrong postfix
-		else:
-			self.TCError('channel {}: unknown channel key \"{}\".'.format(i, c[i]))
+		self.parseCVector(c, i, c_types, C_KEY_VELOCITY, 'vorticity')
 
 #####################################################################################
 # ERROR HANDLING
@@ -1049,12 +1047,11 @@ def savePngsGrayscale(tiles, path, imageCounter=0, tiles_in_image=[1,1], channel
 		if len(img_c)>1 and (plot_vel_x_y or save_rgb!=None):
 			if plot_vel_x_y: saveVel(img, path, imageCounter+image)
 			if save_rgb!=None: saveRGBChannels(img,path, save_rgb,value_interval=rgb_interval, imageCounter=imageCounter+image)
+		if len(channels) == 1:
+			scipy.misc.toimage(img_c[channels[0]], cmin=0.0, cmax=1.0).save(path + 'img_{:04d}.png'.format(imageCounter*noImages+image))
 		else:
-			if len(channels) == 1:
-				scipy.misc.toimage(img_c[channels[0]], cmin=0.0, cmax=1.0).save(path + 'img_{:04d}.png'.format(imageCounter*noImages+image))
-			else:
-				for i in channels:
-					scipy.misc.toimage(img_c[i], cmin=0.0, cmax=1.0).save(path + 'img_{:04d}_c{:04d}.png'.format(imageCounter*noImages+image, i))
+			for i in channels:
+				scipy.misc.toimage(img_c[i], cmin=0.0, cmax=1.0).save(path + 'img_{:04d}_c{:04d}.png'.format(imageCounter*noImages+image, i))
 
 	
 # store velocity as quiver plot
