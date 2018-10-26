@@ -1,5 +1,5 @@
 # tempoGAN
-Source code for the SIGGRAPH paper "tempoGAN: A Temporally Coherent, Volumetric GAN for Super-resolution Fluid Flow"
+Here you can find the source code for the SIGGRAPH paper "tempoGAN: A Temporally Coherent, Volumetric GAN for Super-resolution Fluid Flow".
 
 Further information: https://ge.in.tum.de/publications/tempoGAN/ 
 
@@ -64,9 +64,15 @@ After you trained a GAN model, you can use the model to generate new outputs:
 By default, these examples run on simulation "2006" and "3006" for 3D.
 
 Note: all the commands above are just examples, please check parameters when
-running them (esp. paths, simulation ID ranges etc.)
+running them (esp. paths, simulation ID ranges etc.). The code currently uses
+.uni files for reading and writing grids. This is the default file format of
+mantaflow, so you can check out the sources at http://mantaflow.com/ 
+for details on how to read and write these files.
 
 ## BibTex citation
+
+If you find this work useful, please consider citing the corresponding paper:
+
 ```
 @article{xie2018tempoGAN,
     title={tempoGAN: A Temporally Coherent, Volumetric GAN for Super-resolution Fluid Flow},
