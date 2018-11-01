@@ -12,20 +12,51 @@
 #******************************************************************************
 
 import os,sys
+from itertools import repeat
 import tilecreator_t as tc
 import fluiddataloader as fdl
 import numpy as np
+import paramhelpers as ph
 
-dim=2
-upRes=4
-simSize=256
-tileSize=64
+
+out_path		=	 ph.getParam( "basePath",		'../test_out/' )
+sim_path		=	 ph.getParam( "basePath",		'../data_sim/' )
+randSeed		= int(ph.getParam( "randSeed",		1 )) 				# seed for np and tf initialization
+
+simSize  	= int(ph.getParam( "simSize", 		256 )) 			# tiles of low res sim
+tileSize 	= int(ph.getParam( "tileSize", 		64 )) 			# size of low res tiles
+upRes	  		= int(ph.getParam( "upRes", 		4 )) 				# single generator scaling factor
+dim   = int(ph.getParam( "dim",		 2 )) 				# dimension of dataset
+
+augment = int(ph.getParam( "aug", 1 ))		 # use dataAugmentation or not
+
+# no high res data in TC, using high data in TC's low res
+useScaledData = int(ph.getParam( "scaled", 0 ))
+useLabelData = int(ph.getParam( "label", 0 ))
+useDataBlocks = int(ph.getParam( "block", 0 ))
+blockSize = int(ph.getParam( "blockSize", 1 ))
+
+batchCount = int(ph.getParam( "batchCount", 1 ))
+
+
+ph.checkUnusedParams()
+np.random.seed(randSeed)
+#tf.set_random_seed(randSeed)
+
+
+#if not os.path.exists(out_path):
+#	os.makedirs(out_path)
+test_path,_ = ph.getNextTestPath(0, out_path)
+sys.stdout = ph.Logger(test_path)
+sys.stderr = ph.ErrorLogger(test_path)
+
+print('')
+print('--- TEST STARTED ---')
+print('')
+
+print("\nUsing parameters:\n"+ph.paramsToString())
+
 recursionDepth = 0
-
-augment=False
-
-sim_path = '../data_sim/'
-out_path = '../test_out/'
 
 fromSim = 1018
 toSim = fromSim
@@ -34,11 +65,6 @@ dirIDs = np.linspace(fromSim, toSim, (toSim-fromSim+1),dtype='int16')
 lowfilename = "density_low_%04d.npz"
 highfilename = "density_high_%04d.npz"
 
-# no high res data in TC, using high data in TC's low res
-useScaledData = True
-useLabelData = False
-useDataBlocks = False
-blockSize = 1
 
 if not useScaledData:
 	lowfilename = highfilename
@@ -48,29 +74,54 @@ else:
 	tileSize = tileSize//upRes
 
 #load data
-mfl = ["density", "velocity"]#, "density", "velocity", "density", "velocity" ]
-mol  = [0,0]
-mfh = ["density", "velocity"] if useScaledData else None
-moh  = [0,0] if useScaledData else None
+mfl = ["density", "velocity"] if not useDataBlocks else ["density", "velocity", "density", "velocity", "density", "velocity" ]
+mol  = [0,0] if not useDataBlocks else [0,0,1,1,2,2]
+mfh = None
+moh = None
+if useScaledData:
+	mfh = ["density", "velocity"] if not useDataBlocks else ["density", "velocity", "density", "velocity", "density", "velocity" ]
+	moh  = [0,0] if not useDataBlocks else [0,0,1,1,2,2]
 
 floader = fdl.FluidDataLoader( print_info=1, base_path=sim_path, filename=lowfilename, oldNamingScheme=False, filename_y=highfilename, filename_index_max=200, indices=dirIDs, data_fraction=0.5, multi_file_list=mfl, multi_file_idxOff=mol, multi_file_list_y=mfh , multi_file_idxOff_y=moh)
 x, y, xFilenames  = floader.get()
 
-print(x.shape)
-if useScaledData: print(y.shape)
+tile_format='NYXC'
+z_axis = 1
+if useDataBlocks:
+	tile_format='NBYXC'
+	z_axis = 2
+
+print('Loaded x shape: {}'.format(x.shape))
+if useScaledData: print('Loaded y shape: {}'.format(y.shape))
+l=None
+if useLabelData:
+	l = list(range(len(x)))
+	print('\tUsing label data:\n{}'.format(l))
+b=None
+if useDataBlocks:
+	b = [i for item in range(len(x)) for i in repeat(item, 3)]
+	x = tc.blockFromChannelsToSequence(x, 3)
+	print('\tUsing block data:\n{}'.format(b))
+	print('Extracted blocks x shape: {}'.format(x.shape))
+	if useScaledData:
+		y = tc.blockFromChannelsToSequence(y, 3)
+		print('Extracted blocks y shape: {}'.format(y.shape))
+	if useLabelData:
+		l = b[:]
+
 #save ref:
 if False:
 	print('Output reference')
 	tileShape = (x.shape[0],simSize,simSize,x.shape[-1])
 	tiles = np.reshape(x, tileShape)
-	tc.savePngsGrayscale(tiles[:1], out_path + 'ref_low_',imageCounter=0, tiles_in_image=[1,1], plot_vel_x_y=False, channels=[0], save_rgb = [[2,3]], rgb_interval=[-2,2])
+	tc.savePngs(tiles[:1], test_path + 'ref_low_',imageCounter=0, tiles_in_image=[1,1], plot_vel_x_y=False, channels=[0], save_rgb = [[2,3]], rgb_interval=[-2,2])
 	if useScaledData:
 		tileShape = (y.shape[0],simSize*upRes,simSize*upRes,y.shape[-1])
 		tiles = np.reshape(y, tileShape)
-		tc.savePngsGrayscale(tiles[:1], out_path + 'ref_high_',imageCounter=0, tiles_in_image=[1,1], plot_vel_x_y=False, channels=[0], save_rgb = [[2,3]], rgb_interval=[-2,2])
+		tc.savePngs(tiles[:1], test_path + 'ref_high_',imageCounter=0, tiles_in_image=[1,1], plot_vel_x_y=False, channels=[0], save_rgb = [[2,3]], rgb_interval=[-2,2])
 
 # tilecreator
-TC = tc.TileCreator(tileSize=tileSize, simSize=simSize , dim=dim, densityMinimum=0.1, scaleFactor=upRes, channelLayout_main='d,vx,vy', channelLayout_scaled='d,vx,vy', useScaledData=useScaledData, useLabels=useLabelData, useDataBlocks=useDataBlocks)
+TC = tc.TileCreator(tileSize=tileSize, simSize=simSize , dim=dim, densityMinimum=0.1, scaleFactor=upRes, channelLayout_main='d,vx,vy', channelLayout_scaled='d,vx,vy', useScaledData=useScaledData, useLabels=useLabelData, useDataBlocks=useDataBlocks, logLevel=10)
 if augment:
 	TC.initDataAugmentation(2)
 
@@ -81,28 +132,39 @@ if dim==2:
 		y,_ = np.split(y, [3], axis=-1)
 
 # add low data with dummy labels
-TC.addData(x, y if useScaledData else None)
+TC.addData(x, y if useScaledData else None, l, b)
 
 #bx,by = TC.selectRandomTiles(64, True, augment=True)
 
-if not os.path.exists(out_path):
-	os.makedirs(out_path)
 
 
 #test batch:
 if True:
-	print('Output normal batch')
-	batch_x, batch_y = TC.selectRandomTiles(selectionSize = 8, augment=augment, isTraining=True)
-	print('batch_x shape: {}'.format(batch_x.shape))
-	print('batch_y shape: {}'.format(batch_y.shape))
-	
-	tileShape = (batch_x.shape[0],tileSize,tileSize,batch_x.shape[-1])
-	tiles = np.reshape(batch_x, tileShape)
-	tc.savePngsGrayscale(tiles, out_path,imageCounter=0, tiles_in_image=[1,1], plot_vel_x_y=False, channels=[0], save_rgb = [[1,2]], rgb_interval=[-2,2])
-	if useScaledData:
-		tileShape = (batch_y.shape[0],tileSize*upRes,tileSize*upRes,batch_y.shape[-1])
-		tiles = np.reshape(batch_y, tileShape)
-		tc.savePngsGrayscale(tiles, out_path + 'high_',imageCounter=0, tiles_in_image=[1,1], plot_vel_x_y=False, channels=[0], save_rgb = [[1,2]], rgb_interval=[-2,2])
+	imageCounter=0
+	for batch_number in range(batchCount):
+		i=0
+		print('\nOutput batch {}'.format(batch_number))
+		batch = TC.selectRandomTiles(selectionSize = 8, augment=augment, isTraining=True, blockSize=blockSize, squeezeZ=True)
+		print('batch_x shape: {}'.format(batch[0].shape))
+		
+		#tileShape = (batch[0].shape[0],tileSize,tileSize,batch[0].shape[-1])
+		tiles = batch[i]
+		i+=1
+		#print('tiles_x shape: {}'.format(tiles.shape))
+		ic=tc.savePngs(tiles, test_path, tile_format=tile_format,imageCounter=imageCounter, tiles_in_image=[1,1], plot_vel_x_y=False, channels=[0], save_rgb = [[1,2]], rgb_interval=[-2,2])
+		if useScaledData:
+			print('batch_y shape: {}'.format(batch[1].shape))
+			#tileShape = (batch[1].shape[0],tileSize*upRes,tileSize*upRes,batch[1].shape[-1])
+			tiles = batch[i]
+			i+=1
+			#print('tiles_y shape: {}'.format(tiles.shape))
+			tc.savePngs(tiles, test_path + 'high_', tile_format=tile_format, imageCounter=imageCounter, tiles_in_image=[1,1], plot_vel_x_y=False, channels=[0], save_rgb = [[1,2]], rgb_interval=[-2,2])
+		if useLabelData:
+			tiles = batch[i]
+			i+=1
+			print('labels: {}'.format(tiles))
+		print('-> images {} to {}'.format(imageCounter, ic-1))
+		imageCounter=ic
 
 #test online scaled batch
 # NOT YET IMPLEMENTED
@@ -116,6 +178,8 @@ if False:
 		tileShape = (batch_scaled[r].shape[0], imgSz,imgSz,3)
 		tile = np.reshape(batch_scaled[r], tileShape)
 		print('rec {}: tile shape: {}'.format(r, tile.shape))
-		tc.savePngsGrayscale(tile, out_path + 'rec_{}_'.format(r),imageCounter=0, tiles_in_image=[1,1], channels=[0], save_rgb = [[1,2]], rgb_interval=[-2,2], plot_vel_x_y=False)
+		tc.savePngsGrayscale(tile, test_path + 'rec_{}_'.format(r),imageCounter=0, tiles_in_image=[1,1], channels=[0], save_rgb = [[1,2]], rgb_interval=[-2,2], plot_vel_x_y=False)
 
-
+print('')
+print('--- TEST FINISHED ---')
+print('')

@@ -90,6 +90,19 @@ class Logger(object):
 		self.log.write(message)
 
 	def flush(self): 
-		# to avoid errormsg, " AttributeError: 'Logger' object has no attribute 'flush' "
-		pass
+		self.terminal.flush()
+		self.log.flush()
+
+class ErrorLogger(object):
+	def __init__(self, test_path):
+		self.terminal = sys.stderr
+		self.log = open(test_path + "logfile.log", "a")
+
+	def write(self, message):
+		self.terminal.write(message)
+		self.log.write(message)
+
+	def flush(self): 
+		self.terminal.flush()
+		self.log.flush()
 

@@ -36,12 +36,15 @@ C_KEY_POSITION = 'p'
 
 DATA_KEY_MAIN =			0
 DATA_KEY_SCALED =		1
-DATA_KEY_BLOCK =		2
-DATA_KEY_BLOCK_OFFSET =	3
-DATA_KEY_LABEL=		4
+DATA_KEY_LABEL=		2
+DATA_KEY_BLOCK =		3
+DATA_KEY_BLOCK_OFFSET =	4
 
 DATA_FLAG_ACTIVE='active'
 DATA_FLAG_CHANNELS='channels'
+
+DATA_DIM_LENGTH_SEQUENCE = 5 # seq,z,y,x,c
+DATA_DIM_LENGTH_SINGLE = 4 # z,y,x,c
 
 #keys for augmentation operations
 AOPS_KEY_ROTATE = 'rot'
@@ -57,13 +60,14 @@ C_LAYOUT = {
 	'dens_vel':'d,vx,vy,vz'
 	}
 	
-LOG_LEVEL_INFO=0
+LOG_LEVEL_ERROR=0
 LOG_LEVEL_WARNING=1
-LOG_LEVEL_ERROR=2
+LOG_LEVEL_INFO=2
+LOG_LEVEL_DEBUG=3
 
 class TileCreator(object):
 
-	def __init__(self, tileSize, simSize=64, scaleFactor=2, dim=2, overlapping=0, densityMinimum=0.02, partTrain=0.8, partTest=0.2, partVal=0, channelLayout_main=C_LAYOUT['dens_vel'], channelLayout_scaled=C_LAYOUT['dens'], useScaledData=True, useDataBlocks=False, useLabels=False, padding=0, logLevel=LOG_LEVEL_WARNING):
+	def __init__(self, tileSize, simSize=64, dim=2, densityMinimum=0.02, channelLayout_main=C_LAYOUT['dens_vel'], useScaledData=True, channelLayout_scaled=C_LAYOUT['dens'], scaleFactor=2, useDataBlocks=False, useLabels=False, partTrain=0.8, partTest=0.2, partVal=0, logLevel=LOG_LEVEL_WARNING):
 		'''
 			tileSize, simSize: int, [int,int] if 2D, [int,int,int]
 			channelLayout: 'key,key,...'
@@ -118,21 +122,23 @@ class TileCreator(object):
 			self.TCError('Simulation size mismatch.')
 		self.simSizeLow = np.asarray(self.simSizeLow)
 		
+		if self.dim==2:
+			self.tileSizeLow[0]=1
+			self.simSizeLow[0]=1
+		
 		#if scaleFactor < 1:
 		#	self.TCError('Upres must be at least 1.')
 		self.upres = scaleFactor
 		if useScaledData:
 			self.tileSizeHigh = self.tileSizeLow*scaleFactor
 			self.simSizeHigh = self.simSizeLow*scaleFactor
+			if self.dim==2:
+				self.tileSizeHigh[0]=1
+				self.simSizeHigh[0]=1
 		#else:
 		#	self.tileSizeHigh = np.asarray([1])
 		#	self.simSizeHigh = np.asarray([1])
 		
-		if self.dim==2:
-			self.tileSizeLow[0]=1
-			self.tileSizeHigh[0]=1
-			self.simSizeLow[0]=1
-			self.simSizeHigh[0]=1
 		if np.less(self.simSizeLow, self.tileSizeLow).any():
 			self.TCError('Tile size {} can not be larger than sim size {}, {}.'.format(self.tileSizeLow,self.simSizeLow))
 		
@@ -165,14 +171,14 @@ class TileCreator(object):
 				C_KEY_VORTICITY:len(self.c_lists[DATA_KEY_SCALED][C_KEY_VORTICITY])>0,
 				C_KEY_POSITION:False
 			},
-			DATA_KEY_BLOCK:{
-				DATA_FLAG_ACTIVE:useDataBlocks
-			},
 			DATA_KEY_LABEL:{
 				DATA_FLAG_ACTIVE:useLabels
+			},
+			DATA_KEY_BLOCK:{
+				DATA_FLAG_ACTIVE:useDataBlocks
 			}
 		}
-		self.padding=padding
+		self.padding= 0 #padding #no longer used
 		
 		#if self.hasPN:
 		#[z,y,x, velocities an/or position if enabled (density,vel,vel,vel, pos, pos [,pos])]
@@ -192,9 +198,9 @@ class TileCreator(object):
 		self.data = {
 			DATA_KEY_MAIN:[],
 			DATA_KEY_SCALED:[],
+			DATA_KEY_LABEL:[],
 			DATA_KEY_BLOCK:[],
-			DATA_KEY_BLOCK_OFFSET:[],
-			DATA_KEY_LABEL:[]
+			DATA_KEY_BLOCK_OFFSET:[]
 		}
 		
 		all=partTrain+partTest+partVal
@@ -203,43 +209,50 @@ class TileCreator(object):
 		self.part_test=partTest/all
 		
 		# PRINT INFO
-		print('\n')
-		#print('Dimension: {}, time dimension: {}'.format(self.dim,self.dim_t))
-		print('Main data:')
-		print('  channel layout: {}'.format(self.c_low))
-		print('  default channels: {}'.format(self.c_lists[DATA_KEY_MAIN][C_KEY_DEFAULT]))
-		if len(self.c_lists[DATA_KEY_MAIN][C_KEY_VELOCITY])>0: 
-			print('  velocity channels: {}'.format(self.c_lists[DATA_KEY_MAIN][C_KEY_VELOCITY]))
-		if len(self.c_lists[DATA_KEY_MAIN][C_KEY_VORTICITY])>0: 
-			print('  vorticity channels: {}'.format(self.c_lists[DATA_KEY_MAIN][C_KEY_VORTICITY]))
-			
-		print('Scaled data:')
-		if not useScaledData:
-			print('  not in use')
-		else:
-			print('  channel layout: {}'.format(self.c_high))
-			print('  default channels: {}'.format(self.c_lists[DATA_KEY_SCALED][C_KEY_DEFAULT]))
-			if len(self.c_lists[DATA_KEY_SCALED][C_KEY_VELOCITY])>0: 
-				print('  velocity channels: {}'.format(self.c_lists[DATA_KEY_SCALED][C_KEY_VELOCITY]))
-			if len(self.c_lists[DATA_KEY_SCALED][C_KEY_VORTICITY])>0: 
-				print('  vorticity channels: {}'.format(self.c_lists[DATA_KEY_SCALED][C_KEY_VORTICITY]))
-				
-		print('Labels:')
-		if not useLabels:
-			print('  not in use')
-		else:
-			print('  active')
+		TC_setup_info = '\n'
+		def addInfoLine(line):
+			nonlocal TC_setup_info
+			TC_setup_info += line + '\n'
 		
-		print('Data Block ID:')
-		if not useDataBlocks:
-			print('  not in use')
+		#print('Dimension: {}, time dimension: {}'.format(self.dim,self.dim_t))
+		addInfoLine('Main data:')
+		
+		addInfoLine('  channel layout: {}'.format(self.c_low))
+		addInfoLine('  default channels: {}'.format(self.c_lists[DATA_KEY_MAIN][C_KEY_DEFAULT]))
+		if len(self.c_lists[DATA_KEY_MAIN][C_KEY_VELOCITY])>0: 
+			addInfoLine('  velocity channels: {}'.format(self.c_lists[DATA_KEY_MAIN][C_KEY_VELOCITY]))
+		if len(self.c_lists[DATA_KEY_MAIN][C_KEY_VORTICITY])>0: 
+			addInfoLine('  vorticity channels: {}'.format(self.c_lists[DATA_KEY_MAIN][C_KEY_VORTICITY]))
+			
+		addInfoLine('Scaled data:')
+		if not useScaledData:
+			addInfoLine('  not in use')
 		else:
-			print('  active')
+			addInfoLine('  channel layout: {}'.format(self.c_high))
+			addInfoLine('  default channels: {}'.format(self.c_lists[DATA_KEY_SCALED][C_KEY_DEFAULT]))
+			if len(self.c_lists[DATA_KEY_SCALED][C_KEY_VELOCITY])>0: 
+				addInfoLine('  velocity channels: {}'.format(self.c_lists[DATA_KEY_SCALED][C_KEY_VELOCITY]))
+			if len(self.c_lists[DATA_KEY_SCALED][C_KEY_VORTICITY])>0: 
+				addInfoLine('  vorticity channels: {}'.format(self.c_lists[DATA_KEY_SCALED][C_KEY_VORTICITY]))
+				
+		addInfoLine('Labels:')
+		if not useLabels:
+			addInfoLine('  not in use')
+		else:
+			addInfoLine('  active')
+		
+		addInfoLine('Data Block ID:')
+		if not useDataBlocks:
+			addInfoLine('  not in use')
+		else:
+			addInfoLine('  active')
+			
+		self.TCInfo(TC_setup_info)
 	
 	def initDataAugmentation(self, rot=2, minScale=0.85, maxScale=1.15 ,flip=True):
 		'''
 			set up data augmentation
-			rot: 1: 90 degree rotations; 2: full rotation; else: nop rotation
+			rot: 1: 90 degree rotations; 2: full rotation; else: no rotation
 			Scale: if both 1 disable scaling
 		'''
 		self.useDataAug = True
@@ -292,7 +305,7 @@ class TileCreator(object):
 			}
 		}
 
-		msg = 'data augmentation: '
+		msg = 'setup data augmentation: '
 
 		if rot==2:
 			self.do_rotation = True
@@ -325,13 +338,13 @@ class TileCreator(object):
 		if self.do_flip:
 			msg += 'flip'
 		msg += '.'
-		print(msg)
+		self.TCInfo(msg)
 		self.interpolation_order = 1
 		self.fill_mode = 'constant'
 		
 	
 	
-	def addData(self, main, scaled=None, blocks=None, labels=None):
+	def addData(self, main, scaled=None, labels=None, blocks=None):
 		'''
 			low: list of or single 3D data np arrays
 			high: list of or single 3D data np arrays, optional
@@ -389,10 +402,12 @@ class TileCreator(object):
 			if single_datum:
 				if not np.isscalar(blocks): #would be a scalar in case of single datum
 					self.TCError('single datum input needs a scalar Block.')
-				label = [label]
+				blocks = [blocks]
 			else:
-				if np.isscalar(blocks) or len(blocks)!= main.shape[0]:
-					self.TCError('Unequal amount of main ({}) and Block data.'.format(main.shape[1]))
+				if np.isscalar(blocks):
+					self.TCError('Block data must be an array-like')
+				if len(blocks)!= main.shape[0]:
+					self.TCError('Unequal amount of main ({}) and Block ({}) data.'.format(main.shape[0], len(blocks)))
 				
 		
 		# label data checks
@@ -405,19 +420,21 @@ class TileCreator(object):
 		
 		
 		
-		if (not np.array_equal(single_frame_low_shape, self.frame_shape_low) or not np.array_equal(single_frame_high_shape,self.frame_shape_high)):
-			self.TCError('Frame shape mismatch: is - specified\n\tlow: {} - {}\n\thigh: {} - {}'.format(single_frame_low_shape, self.frame_shape_low, single_frame_high_shape,self.frame_shape_high))
+		#if (not np.array_equal(single_frame_low_shape, self.frame_shape_low) or not np.array_equal(single_frame_high_shape,self.frame_shape_high)):
+		#	self.TCError('Frame shape mismatch: is - specified\n\tlow: {} - {}\n\thigh: {} - {}'.format(single_frame_low_shape, self.frame_shape_low, single_frame_high_shape,self.frame_shape_high))
 		
 		
 			
 		self.data[DATA_KEY_MAIN].extend(main)
 		if self.dataIsActive(DATA_KEY_SCALED):
 			self.data[DATA_KEY_SCALED].extend(scaled)
+		if self.dataIsActive(DATA_KEY_LABEL):
+			self.data[DATA_KEY_LABEL].extend(labels)
 		
 		if self.dataIsActive(DATA_KEY_BLOCK): # using blocks
 			self.data[DATA_KEY_BLOCK].extend(blocks)
 			# sort data by blocks
-			self.data[DATA_KEY_MAIN] = [x for _, x in sorted(zip(self.data[DATA_KEY_BLOCK], self.data[DATA_KEY_MAIN]))]
+			self.data[DATA_KEY_MAIN] = [x for (_, x) in sorted(zip(self.data[DATA_KEY_BLOCK], self.data[DATA_KEY_MAIN]), key= lambda i: i[0])]
 			
 			if self.dataIsActive(DATA_KEY_SCALED):
 				self.data[DATA_KEY_SCALED] = [x for _, x in sorted(zip(self.data[DATA_KEY_BLOCK], self.data[DATA_KEY_SCALED]))]
@@ -428,7 +445,7 @@ class TileCreator(object):
 			self.data[DATA_KEY_BLOCK] = sorted(self.data[DATA_KEY_BLOCK])
 			
 			# blocks, offset, amount
-			self.data[DATA_KEY_LABEL_OFFSET] = []
+			self.data[DATA_KEY_BLOCK_OFFSET] = []
 			label_set = list(set(self.data[DATA_KEY_BLOCK]))
 			for i in range(len(label_set)-1):
 				idx = self.data[DATA_KEY_BLOCK].index(label_set[i])
@@ -439,9 +456,13 @@ class TileCreator(object):
 			
 			self.data[DATA_KEY_BLOCK_OFFSET] = np.asarray(self.data[DATA_KEY_BLOCK_OFFSET])
 			
+			self.TCDebug('Created data blocks: [id, offset, size]\n{}'.format(self.data[DATA_KEY_BLOCK_OFFSET]))
 			
-		print('\n')
-		print('Added {} datasets. Total: {}'.format(main.shape[0], len(self.data[DATA_KEY_MAIN])))
+		#print('\n')
+		if not self.dataIsActive(DATA_KEY_BLOCK):
+			self.TCInfo('Added {} datasets. Total: {}'.format(main.shape[0], len(self.data[DATA_KEY_MAIN])))
+		else:
+			self.TCInfo('Added {} datasets. Total: {}, Blocks: {}'.format(main.shape[0], len(self.data[DATA_KEY_MAIN]), len(self.data[DATA_KEY_BLOCK_OFFSET])))
 		self.splitSets()
 	
 	def splitSets(self):
@@ -455,6 +476,7 @@ class TileCreator(object):
 		end_test = end_train + int( length * self.part_test )
 		# TODO handle block data
 		# if active strip whole blocks from the end
+		self.TCDebug('set borders {}'.format([end_train, end_test, length]))
 		if self.dataIsActive(DATA_KEY_BLOCK):
 			'''
 			# get the block the border is in
@@ -470,8 +492,19 @@ class TileCreator(object):
 			else:
 				end_test = block_test[1]
 			'''
-			end_train = np.argmax(self.data[DATA_KEY_BLOCK_OFFSET][:,1:2] > end_train)
-			end_test = np.argmax(self.data[DATA_KEY_BLOCK_OFFSET][:,1:2] > end_test)
+			length = len(self.data[DATA_KEY_BLOCK_OFFSET])
+			end_train = (self.data[DATA_KEY_BLOCK_OFFSET][:,1:2] > end_train)
+			if end_train.any():
+				end_train = np.argmax(end_train)
+			else:
+				end_train = length
+			end_test = (self.data[DATA_KEY_BLOCK_OFFSET][:,1:2] > end_test)
+			if end_test.any():
+				end_test = np.argmax(end_test)
+			else:
+				end_test = length
+			
+			self.TCDebug('set borders blocks {}'.format([end_train, end_test, length]))
 		#(or simply split by block count...)
 		
 		
@@ -479,9 +512,10 @@ class TileCreator(object):
 		# if using block data the index of the first block in DATA_KEY_BLOCK_OFFSET of the set is stored
 		self.setBorders = [end_train, end_test, length]
 		
-		print('Training set: {}'.format(self.setBorders[0]))
-		print('Testing set:  {}'.format(self.setBorders[1]-self.setBorders[0]))
-		print('Validation set:  {}'.format(self.setBorders[2]-self.setBorders[1]))
+		self.TCInfo('Set sizes: training: {}, validation: {}, testing: {}, '.format(self.setBorders[0], self.setBorders[1]-self.setBorders[0], self.setBorders[2]-self.setBorders[1]))
+		#print('Training set: {}'.format(self.setBorders[0]))
+		#print('Testing set:  {}'.format(self.setBorders[1]-self.setBorders[0]))
+		#print('Validation set:  {}'.format(self.setBorders[2]-self.setBorders[1]))
 		
 	def clearData(self):
 		'''
@@ -494,6 +528,7 @@ class TileCreator(object):
 			DATA_KEY_BLOCK_OFFSET:[],
 			DATA_KEY_LABEL:[]
 		}
+		self.TCInfo('Data cleared')
 	
 	def createTiles(self, data, tileShape, strides=-1): 
 		'''
@@ -550,12 +585,13 @@ class TileCreator(object):
 #####################################################################################
 	
 	
-	def selectRandomTiles(self, selectionSize, isTraining=True, augment=False, blockSize = 1): # ,ouputBlockID=False
+	def selectRandomTiles(self, selectionSize, isTraining=True, augment=False, blockSize = 1, squeezeZ=False, squeezeBlocks=True): # ,ouputBlockID=False
 		'''
 			main method to create baches
 			Return:
-				shape: [selectionSize, blockSize, z, y, x, channels]
-				if 2D z = 1
+				shape: selectionSize,[ blockSize,][ z,] y, x, channels
+				if 2D z = 1 unless squeezeZ is set
+				block dimension is removed by default when block data is not active
 				channels: density, [vel x, vel y, vel z], [pos x, pox y, pos z]
 		'''
 		if isTraining:
@@ -564,7 +600,7 @@ class TileCreator(object):
 		else:
 			if (self.setBorders[1] - self.setBorders[0])<1:
 				self.TCError('no test data.')
-		# TODO check/handle set borders
+		# check/handle set borders
 		if not self.dataIsActive(DATA_KEY_BLOCK) and blockSize > 1:
 			self.TCWarning('Block data is inactive, blockSize {} will be ignored.'.format(blockSize))
 			blockSize = 1
@@ -575,44 +611,51 @@ class TileCreator(object):
 				self.TCError('No label block with size {} available. Max size is {}.'.format(blockSize, maxBlockSize))
 			availableBlocks = np.sum(self.data[DATA_KEY_BLOCK_OFFSET][:,2:] >= blockSize)
 			if (availableBlocks / self.data[DATA_KEY_BLOCK_OFFSET].shape[0]) < 0.15:
-				self.TCInfo('only {} of {} labels have a block size at least {}.'.format(availableBlocks, self.data[DATA_KEY_BLOCK_OFFSET].shape[0], blockSize))
+				self.TCInfo('only {} of {} data blocks have a block size of at least {}.'.format(availableBlocks, self.data[DATA_KEY_BLOCK_OFFSET].shape[0], blockSize))
 		
 		
 		batch = {DATA_KEY_MAIN:[]}
-		#batch_main = []
 		if self.dataIsActive(DATA_KEY_SCALED):
 			batch[DATA_KEY_SCALED]=[]
 		if self.dataIsActive(DATA_KEY_LABEL):
 			batch[DATA_KEY_LABEL]=[]
-		#batch_scaled = []
-		#batch_label = []
 		for i in range(selectionSize):
 			if augment and self.useDataAug: #data augmentation
 				data = self.generateTile(isTraining, blockSize)
 			else: #cut random tile without augmentation
 				if augment:
-					self.TCInfo('Augmentation flag is ingored if data augmentation is not initialized.')
+					self.TCWarning('Augmentation flag is ingored if data augmentation is not initialized.')
 				data = self.getRandomDatumDict(isTraining, blockSize)
 				data[DATA_KEY_MAIN], data[DATA_KEY_SCALED] = self.getRandomTile(data[DATA_KEY_MAIN], data[DATA_KEY_SCALED])
-				
 			for data_key in batch:
 				batch[data_key].append(data[data_key])
-			#batch_main.append(low)
-			#if self.dataIsActive(DATA_KEY_SCALED):
-			#	batch_scaled.append(high)
-			#if self.dataIsActive(DATA_KEY_LABEL):
-			#	batch_label.append(data[DATA_KEY_LABEL])
-			
-		#TODO collapse blockSize=1
-		if not self.dataIsActive(DATA_KEY_BLOCK):
+		
+		batch[DATA_KEY_MAIN] = np.asarray(batch[DATA_KEY_MAIN])
+		if self.dataIsActive(DATA_KEY_SCALED):
+			batch[DATA_KEY_SCALED] = np.asarray(batch[DATA_KEY_SCALED])
+		
+		if self.dim==2 and squeezeZ:
+			TCDebug('squeeze z dimension')
+			#(tiles, block, z,y,x,c)
+			batch[DATA_KEY_MAIN] = np.squeeze(batch[DATA_KEY_MAIN], axis=2)
+			if self.dataIsActive(DATA_KEY_SCALED):
+				batch[DATA_KEY_SCALED] = np.squeeze(batch[DATA_KEY_SCALED], axis=2)
+		
+		#collapse blockSize=1
+		if squeezeBlocks and blockSize==1:
+			TCDebug('squeeze block dimension')
 			#(tiles, block, z,y,x,c)
 			batch[DATA_KEY_MAIN] = np.squeeze(batch[DATA_KEY_MAIN], axis=1)
 			if self.dataIsActive(DATA_KEY_SCALED):
 				batch[DATA_KEY_SCALED] = np.squeeze(batch[DATA_KEY_SCALED], axis=1)
+			# for labels too?
+		elif squeezeBlocks:
+			self.TCWarning('can\'t squeeze block dimension with size {}.'.format(blockSize))
+			
+		#self.TCInfo('batch shape: {}'.format(batch[DATA_KEY_MAIN].shape))
 			
 			
-			
-		ret_list = [batch[DATA_KEY_MAIN]]
+		ret_list = [np.asarray(batch[DATA_KEY_MAIN])]
 		if self.dataIsActive(DATA_KEY_SCALED):
 			ret_list.append(batch[DATA_KEY_SCALED])
 		if self.dataIsActive(DATA_KEY_LABEL):
@@ -658,7 +701,7 @@ class TileCreator(object):
 		
 		#rotate
 		if self.do_rotation:
-			bounds = np.array(data[DATA_KEY_MAIN].shape)*0.16 #bounds applied on all sides, 1.5*(1-2*0.16)~1
+			bounds = np.array(self.getTileShape(data[DATA_KEY_MAIN]))*0.16 #bounds applied on all sides, 1.5*(1-2*0.16)~1
 			data = self.rotate(data)
 		
 		#get a tile
@@ -677,13 +720,13 @@ class TileCreator(object):
 		
 		# check tile size
 		target_shape_low = np.copy(self.tile_shape_low)
-		if not np.array_equal(data[DATA_KEY_MAIN].shape,target_shape_low):
-			self.TCError('Wrong MAIN tile shape after data augmentation. is: {}. goal: {}.'.format(data[DATA_KEY_MAIN].shape, target_shape_low))
+		if not np.array_equal(self.getTileShape(data[DATA_KEY_MAIN]),target_shape_low):
+			self.TCErrorInternal('Wrong MAIN tile shape after data augmentation. is: {}. goal: {}.'.format(data[DATA_KEY_MAIN].shape, target_shape_low))
 		
 		if self.dataIsActive(DATA_KEY_SCALED):
 			target_shape_high = np.copy(self.tile_shape_high)
-			if not np.array_equal(data[DATA_KEY_SCALED].shape,target_shape_high):
-				self.TCError('Wrong SCALED tile shape after data augmentation. is: {}. goal: {}.'.format(data[DATA_KEY_SCALED].shape, target_shape_high))
+			if not np.array_equal(self.getTileShape(data[DATA_KEY_SCALED]),target_shape_high):
+				self.TCErrorInternal('Wrong SCALED tile shape after data augmentation. is: {}. goal: {}.'.format(data[DATA_KEY_SCALED].shape, target_shape_high))
 		
 		return data
 		
@@ -700,9 +743,11 @@ class TileCreator(object):
 				blockSet = self.data[DATA_KEY_BLOCK_OFFSET][0:self.setBorders[0]]
 			else:
 				blockSet = self.data[DATA_KEY_BLOCK_OFFSET][self.setBorders[0]:self.setBorders[1]]
-			availableBlocks = np.where(blockSet[:,2:] >= blockSize)
-			randBlock = np.random.choice(blockSet, p=availableBlocks) # p=availableBlocks/np.sum(availableBlocks) ?
-			randOffset = randrange(0, randBlock[2] - blockSize)
+			availableBlocks = np.resize(np.where(blockSet[:,2] >= blockSize), (-1))
+			#self.TCInfo('available blocks {}'.format(availableBlocks))
+			randBlock = np.random.choice(availableBlocks) #len(blockSet), p=availableBlocks/np.sum(availableBlocks)) # p=availableBlocks/np.sum(availableBlocks) ?
+			randBlock = blockSet[randBlock]
+			randOffset = randrange(0, randBlock[2] - (blockSize-1))
 			randNo = randBlock[1] + randOffset
 			# random block, random offset in set
 			pass
@@ -749,7 +794,7 @@ class TileCreator(object):
 		else:
 			ret.append(None)
 		if self.dataIsActive(DATA_KEY_LABEL):
-			ret.append(np.copy(self.data[DATA_KEY_LABEL][index:index+blockSize]))
+			ret.append(self.data[DATA_KEY_LABEL][index:index+blockSize])
 		else:
 			ret.append(None)
 		return ret
@@ -765,11 +810,12 @@ class TileCreator(object):
 		if tileShapeLow is None:
 			tileShapeLow = np.copy(self.tile_shape_low) # use copy is very important!!!
 		tileShapeHigh = tileShapeLow*self.upres
-		
-		if len(low.shape)!=5 or len(tileShapeLow)!=4:
-			self.TCErrorInternal('Data shape mismatch.')
-		if (not high is None) and len(high.shape)!=5:
-			self.TCErrorInternal('Data shape mismatch.')
+		if  not self.isValidMainTileShape(tileShapeLow):
+			self.TCErrorInternal('Invalid tile shape')
+		if not self.isFrameSequence(low): #len(low.shape)!=5 or len(tileShapeLow)!=4:
+			self.TCErrorInternal('MAIN data is no sequence')
+		if (not high is None) and not self.isFrameSequence(high):
+			self.TCErrorInternal('SCALED data is no sequence')
 		
 		frameShapeLow = np.asarray(low.shape[1:])
 		start = np.ceil(bounds)
@@ -811,7 +857,7 @@ class TileCreator(object):
 			wrapper to call the augmentation operations specified in self.aops in initAugmentation
 		"""
 		for data_key in data:
-			if not dataCanAugment(data_key): continue
+			if not self.dataCanAugment(data_key): continue
 			orig_shape = data[data_key].shape
 			tile_t = orig_shape[-1] // self.data_flags[data_key][DATA_FLAG_CHANNELS]
 			data_array = data[data_key]
@@ -827,6 +873,8 @@ class TileCreator(object):
 			random uniform rotation of low and high data of a given frame
 		'''
 		#check if single frame
+		if len(data[DATA_KEY_MAIN].shape)==4:
+			pass
 		
 		#2D:
 		if self.dim==2:
@@ -851,8 +899,12 @@ class TileCreator(object):
 		data = self.special_aug(data, AOPS_KEY_ROTATE, rotation_matrix)
 		
 		for data_key in data:
-			if dataCanAugment(data_key):
-				data[data_key] = self.applyTransform(data[data_key], rotation_matrix.T)
+			if self.dataCanAugment(data_key):
+				if self.isFrameSequence(data[data_key]):
+					for i in range(len(data[data_key])):
+						data[data_key][i]=self.applyTransform(data[data_key][i], rotation_matrix.T)
+				else:
+					data[data_key] = self.applyTransform(data[data_key], rotation_matrix.T)
 			
 			
 		return data
@@ -877,7 +929,7 @@ class TileCreator(object):
 		rotation2 = rotationMatrix[1:3, 1:3]
 		channels = np.split(datum, datum.shape[-1], -1)
 		for v in c_list:
-			if len(v) == 3: # currently always ends here!! even for 2D, #z,y,x to match rotation matrix
+			if len(v) == 3: #z,y,x to match rotation matrix
 				vel = np.stack([channels[v[2]].flatten(),channels[v[1]].flatten(),channels[v[0]].flatten()]) 
 				vel = rotation3.dot(vel)
 				channels[v[2]] = np.reshape(vel[0], channels[v[2]].shape)
@@ -904,7 +956,7 @@ class TileCreator(object):
 			self.TCError('need 2 axes for rotate90.')
 		
 		for data_key in data:
-			if dataCanAugment(data_key):
+			if self.dataCanAugment(data_key):
 				data[data_key] = np.rot90(data[data_key], axes=axes)
 		
 		data = self.special_aug(data, AOPS_KEY_ROT90, axes)
@@ -928,14 +980,14 @@ class TileCreator(object):
 			axes: list of axis indices 0,1,2-> z,y,x
 		'''
 		# axis: 0,1,2 -> z,y,x
-		
-		if not isFrame:
-			axes = np.asarray(axes) + np.ones(axes.shape)
+		axes = np.asarray(axes, dtype=np.int32)
+		if self.isFrameSequence(data[DATA_KEY_MAIN]): # not isFrame: #only for dims, not vectors
+			axes_m = axes + np.ones(axes.shape, dtype=np.int32)
 		
 		#flip tiles/frames
-		for axis in axes:
+		for axis in axes_m:
 			for data_key in data:
-				if dataCanAugment(data_key):
+				if self.dataCanAugment(data_key):
 					data[data_key] = np.flip(data[data_key], axis)
 			
 		
@@ -974,10 +1026,10 @@ class TileCreator(object):
 		if self.dim==2:
 			scale[0] = 1
 		
-		# to ensure high/low ration stays the same
-		scale = np.round(np.array(data[DATA_KEY_MAIN].shape) * scale )/np.array(data[DATA_KEY_MAIN].shape)
 		if len(data[DATA_KEY_MAIN].shape)==5: #frame sequence
 			scale = np.append([1],scale)
+		# to ensure high/low ration stays the same
+		scale = np.round(np.array(data[DATA_KEY_MAIN].shape) * scale )/np.array(data[DATA_KEY_MAIN].shape)
 			
 		#apply transform
 		#low = self.applyTransform(low, zoom_matrix)
@@ -985,7 +1037,7 @@ class TileCreator(object):
 		
 		#changes the size of the frame. should work well with getRandomTile(), no bounds needed
 		for data_key in data:
-			if dataCanAugment(data_key):
+			if self.dataCanAugment(data_key):
 				data[data_key]  = scipy.ndimage.zoom( data[data_key], scale, order=self.interpolation_order, mode=self.fill_mode, cval=0.0)
 		
 		#necessary?
@@ -1007,7 +1059,10 @@ class TileCreator(object):
 	def applyTransform(self, data, transform_matrix, data_dim=3):
 		# change axis order from z,y,x to x,y,z? (invert axis order +channel)
 		if len(data.shape)!=4:
-			self.TCError('Data shape mismatch.')
+			if len(data.shape)!=5:
+				self.TCErrorInternal('Data shape mismatch.')
+			else: # data sequence
+				self.TCErrorInternal('TODO: implement.')
 			
 		#set transform to center; from fluiddatagenerator.py
 		offset = np.array(data.shape) / 2 - np.array([0.5, 0.5, 0.5, 0])
@@ -1077,6 +1132,29 @@ class TileCreator(object):
 	
 	def dataCanAugment(self, data_key):
 		return (self.dataIsActive(data_key) and (data_key in self.aops))
+	
+	def checkDims(self, shape, dim):
+		return len(shape)==dim
+	
+	def isFrameSequence(self, data):
+		return len(data.shape)==DATA_DIM_LENGTH_SEQUENCE
+		#return checkDims(data.shape, DATA_DIM_LENGTH_SEQUENCE)
+	
+	def isFrameSingle(self, data):
+		return len(data.shape)==DATA_DIM_LENGTH_SINGLE
+	
+	def isValidMainTileShape(self, shape):
+		if len(shape)!=DATA_DIM_LENGTH_SINGLE: return False
+		# smaller than frame
+		self.frame_shape_low
+		if np.less(self.simSizeLow, shape[:-1]).any(): return False
+		return True
+	
+	def getTileShape(self, data):
+		if not type(data) is np.ndarray: self.TCError('Can\'t get tile shape from not np-array data')
+		if self.isFrameSequence(data): return data.shape[1:]
+		elif self.isFrameSingle(data): return data.shape[:]
+		else: self.TCError('Can\'t get tile shape from data with shape {}'.format(data.shape))
 	
 	def getFrameTiles(self, index):
 		''' returns the frame as tiles'''
@@ -1176,24 +1254,27 @@ class TileCreator(object):
 #####################################################################################
 # ERROR HANDLING
 #####################################################################################
-	def TCInfo(self, msg):
-		if self.logLevel <= LOG_LEVEL_INFO:
-			print('TC INFO: {}'.format(msg))
-	
-	def TCWarning(self, msg):
-		if self.logLevel <= LOG_LEVEL_WARNING:
-			print('TC WARNING: {}'.format(msg))
-	
-	def TCError(self, msg):
-		if self.logLevel <= LOG_LEVEL_ERROR:
-			print('TC ERROR: {}'.format(msg))
-		raise TilecreatorError(msg)
-		
-	
 	def TCErrorInternal(self, msg):
-		if self.logLevel <= LOG_LEVEL_ERROR:
+		if self.logLevel >= LOG_LEVEL_ERROR:
 			print('TC INTERNAL ERROR: {}'.format(msg))
 		raise TilecreatorError(msg)
+	
+	def TCError(self, msg):
+		if self.logLevel >= LOG_LEVEL_ERROR:
+			print('TC ERROR: {}'.format(msg))
+		raise TilecreatorError(msg)
+	
+	def TCWarning(self, msg):
+		if self.logLevel >= LOG_LEVEL_WARNING:
+			print('TC WARNING: {}'.format(msg))
+	
+	def TCInfo(self, msg):
+		if self.logLevel >= LOG_LEVEL_INFO:
+			print('TC INFO: {}'.format(msg))
+	
+	def TCDebug(self, msg):
+		if self.logLevel >= LOG_LEVEL_DEBUG:
+			print('TC DEBUG: {}'.format(msg))
 		
 class TilecreatorError(Exception):
 	''' Tilecreator errors '''
@@ -1239,9 +1320,9 @@ def savePngsBatch(low,high, TC, path, batchCounter=-1, save_vels=False, dscale=1
 
 		# note - outputs all channels as images, also vel channels...
 		clout = np.arange(low.shape[4])
-		savePngsGrayscale(lowD, path+'low_'+suff, tiles_in_image=[batch//tileX,tileX], channels=clout )
+		savePngs(lowD, path+'low_'+suff, tiles_in_image=[batch//tileX,tileX], channels=clout )
 		chout = np.arange(high.shape[4])
-		savePngsGrayscale(tiles=highD, path=path+'high_'+suff, imageCounter=0, tiles_in_image=[batch//tileX,tileX], channels=chout )
+		savePngs(tiles=highD, path=path+'high_'+suff, imageCounter=0, tiles_in_image=[batch//tileX,tileX], channels=chout )
 
 	# plot velocities , for individual samples
 	if save_vels:
@@ -1252,17 +1333,39 @@ def savePngsBatch(low,high, TC, path, batchCounter=-1, save_vels=False, dscale=1
 
 
 # simpler function to output multiple tiles into grayscale pngs
-def savePngsGrayscale(tiles, path, imageCounter=0, tiles_in_image=[1,1], channels=[0], save_gif=False, plot_vel_x_y=False, save_rgb=None, rgb_interval=[-1,1]):
+def savePngs(tiles, path, tile_format='NYXC', imageCounter=0, tiles_in_image=[1,1], channels=[0], save_gif=False, plot_vel_x_y=False, save_rgb=None, rgb_interval=[-1,1]):
 	'''
+		tiles: np-array with shape matching format param
+		tile_format: YXC, NYXC, BYXC, NBYXC
 		tiles_in_image: (y,x)
-		tiles: shape: (tile,y,x,c)
+		
+		return: updated image counter
 	'''
-	tilesInImage = tiles_in_image[0]*tiles_in_image[1]
-	if len(tiles)%tilesInImage!=0: 
-		print('ERROR: number of tiles does not match tiles per image')
-		return
+	tile_format = tile_format.lower()
+	valid_formats = ['yx','yxc','nyx','nyxc','byxc', 'nbyxc']
+	full_format = valid_formats[-1]
 	tiles = np.asarray(tiles)
-	noImages = len(tiles)//tilesInImage
+	shape = tiles.shape
+	if (not tile_format in valid_formats) or len(shape)!=len(tile_format):
+		msg = 'Invalid tile format \'{}\' for tiles with shape {}'.format(tile_format, shape)
+		print('TC ERROR: {}'.format(msg))
+		return
+	tilesInImage = tiles_in_image[0]*tiles_in_image[1]
+	
+	if shape[0]%tilesInImage!=0: 
+		msg = 'Number of tiles does not match tiles per image'
+		print('TC ERROR: {}'.format(msg))
+		return
+	
+	tileShape = [1,1,1,1,1]
+	for dim in tile_format:
+		tileShape[full_format.index(dim)] = shape[tile_format.index(dim)]
+	
+	# to full 'nbyxc' format
+	tiles = np.reshape(tiles, tileShape)
+	
+	
+	noImages = shape[0]//tilesInImage
 	if save_gif:
 		gif=[]
 		
@@ -1273,20 +1376,30 @@ def savePngsGrayscale(tiles, path, imageCounter=0, tiles_in_image=[1,1], channel
 			offset=image*tilesInImage + y*tiles_in_image[1]
 			img.append(np.concatenate(tiles[offset:offset+tiles_in_image[1]],axis=1)) #combine x
 		img = np.concatenate(img, axis=0) #combine y
-		# move channels to first dim.
-		img_c = np.rollaxis(img, -1, 0)
-		if len(img_c)>1 and (plot_vel_x_y or save_rgb!=None):
-			if plot_vel_x_y: saveVel(img, path, imageCounter+image)
-			if save_rgb!=None: saveRGBChannels(img,path, save_rgb,value_interval=rgb_interval, imageCounter=imageCounter+image)
-		if len(channels) == 1:
-			scipy.misc.toimage(img_c[channels[0]], cmin=0.0, cmax=1.0).save(path + 'img_{:04d}.png'.format(imageCounter*noImages+image))
-		else:
-			for i in channels:
-				scipy.misc.toimage(img_c[i], cmin=0.0, cmax=1.0).save(path + 'img_{:04d}_c{:04d}.png'.format(imageCounter*noImages+image, i))
+		# format from here: byxc
+		block_count = len(img)
+		for block_number in range(len(img)):
+			block = img[block_number] #actually one image-slice of the block
+			# format from here: yxc
+			# move channels to first dim.
+			img_c = np.rollaxis(block, -1, 0)
+			img_name = 'img_{:04d}'.format(imageCounter+image)
+			if block_count>1:
+				img_name += '_b{:04d}'.format(block_number)
+			
+			if len(img_c)>1 and (plot_vel_x_y or save_rgb!=None):
+				if plot_vel_x_y: saveVel(block, path, name=img_name+'_vel-x-y.png')
+				if save_rgb!=None: saveRGBChannels(block,path, save_rgb,value_interval=rgb_interval, filename=img_name + '_rgb_{:04d}.png')
+			if len(channels) == 1:
+				scipy.misc.toimage(img_c[channels[0]], cmin=0.0, cmax=1.0).save(path + '{}.png'.format(img_name))
+			else:
+				for i in channels:
+					scipy.misc.toimage(img_c[i], cmin=0.0, cmax=1.0).save(path + '{}_c{:04d}.png'.format(img_name, i))
+	return imageCounter + noImages
 
 	
 # store velocity as quiver plot
-def saveVel(tile, path, imageCounter=0, name='vel-x-y'):
+def saveVel(tile, path, name='vel-x-y'):
 	# origin is in upper left corner, transform acordingly
 	y, x = np.mgrid[-tile.shape[0]:0, 0:tile.shape[1]]
 	vx = None; vy = None
@@ -1301,7 +1414,7 @@ def saveVel(tile, path, imageCounter=0, name='vel-x-y'):
 	if found_matplotlib:
 		matplotlib.pyplot.quiver(x,y,vx.flatten(),vy.flatten(), units = 'xy', scale = 1)
 		matplotlib.pyplot.axis('equal')
-		matplotlib.pyplot.savefig(path + '{}_{:04d}.png'.format(name,imageCounter))
+		matplotlib.pyplot.savefig(path + name)
 		matplotlib.pyplot.clf()
 	
 # save velocity channels from the tilecreator with multiple axis projections (uses saveVel)
@@ -1338,7 +1451,7 @@ def saveVelChannels(data, c_idx, path, average=False, scale=1.0, normalize=True,
 			saveVel(vavg, path=vpath, name='_yz' )
 
 
-def saveRGBChannels(data, path, channel_list, imageCounter=0, value_interval=[-1,1]):
+def saveRGBChannels(data, path, channel_list, value_interval=[-1,1], filename = 'img_rgb_{:04d}.png'):
 	"""
 		data: shape[y,x,c]
 		channels: list of triples of channel ids saved as RGB image
@@ -1349,12 +1462,14 @@ def saveRGBChannels(data, path, channel_list, imageCounter=0, value_interval=[-1
 	num_channels = data.shape[-1]
 	
 	channels = np.split(data, num_channels, -1)
+	c = 0
 	for i in channel_list:
 		if len(i)==2:
 			img = np.concatenate([channels[i[0]], channels[i[1]], np.ones_like(channels[i[0]])*cmin], -1)
 		else:
 			img = np.concatenate([channels[i[0]], channels[i[1]], channels[i[2]]], -1)
-		scipy.misc.toimage(img, cmin=-1.0, cmax=1.0).save(path + 'img_rgb_{:04d}.png'.format(imageCounter))
+		scipy.misc.toimage(img, cmin=-1.0, cmax=1.0).save(path + filename.format(c))
+		c+=1
 
 #####################################################################################
 # UNI OUTPUT
@@ -1420,6 +1535,32 @@ def TDarrayToUni(input, savePath, motherUniPath, imageHeight, imageWidth, imageD
 #####################################################################################
 # TEMPO BATCH CREATION
 #####################################################################################
+
+def blockFromChannelsToSequence(data, blockLength):
+	'''
+		assumes channels is last dimension, channels of a block are consecutive (blocks of channels)
+		separate blocks from channels
+		moved blocks to new first dimension
+		merges blocks into sequence
+	'''
+	shape = list(data.shape)
+	if shape[-1] % blockLength != 0:
+		pass #error
+	num_channels = shape[-1]//blockLength
+	shape_block = shape + [num_channels] # actual channels
+	shape_block[-2] = blockLength
+	data = np.reshape(data, shape_block)
+	data = np.rollaxis(data, -2, 1) # blocks after sequence (sequence of blocks)
+	shape[0] *= blockLength # blocks into sequence
+	shape[-1] = num_channels
+	data = np.reshape(data, (shape))
+	return data
+
+def blockToChannels(data):
+	'''
+		merge blocks to channels
+	'''
+	pass
 
 # ******************************************************************************
 # faster functions, batch operations
