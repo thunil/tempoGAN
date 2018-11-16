@@ -19,25 +19,27 @@ import numpy as np
 import paramhelpers as ph
 
 
-out_path		=	 ph.getParam( "basePath",		'../test_out/' )
+out_path		=	 ph.getParam( "outPath",		'../test_out/' )
 sim_path		=	 ph.getParam( "basePath",		'../data_sim/' )
 randSeed		= int(ph.getParam( "randSeed",		1 )) 				# seed for np and tf initialization
 
 simSize  	= int(ph.getParam( "simSize", 		256 )) 			# tiles of low res sim
 tileSize 	= int(ph.getParam( "tileSize", 		64 )) 			# size of low res tiles
-upRes	  		= int(ph.getParam( "upRes", 		4 )) 				# single generator scaling factor
-dim   = int(ph.getParam( "dim",		 2 )) 				# dimension of dataset
+upRes       = int(ph.getParam( "upRes", 		4 )) 				# single generator scaling factor
+dim         = int(ph.getParam( "dim",		 2 )) 				# dimension of dataset
 
 augment = int(ph.getParam( "aug", 1 ))		 # use dataAugmentation or not
+
+fromSim  = int(ph.getParam( "fromSim", 1018 ))
+toSim    = int(ph.getParam( "toSim",   fromSim ))	 
+indexMax = int(ph.getParam( "indexMax", 200 ))	 
 
 # no high res data in TC, using high data in TC's low res
 useScaledData = int(ph.getParam( "scaled", 0 ))
 useLabelData = int(ph.getParam( "label", 0 ))
 useDataBlocks = int(ph.getParam( "block", 0 ))
-blockSize = int(ph.getParam( "blockSize", 1 ))
-
+blockSize = int(ph.getParam( "blockSize", 1 )) 
 batchCount = int(ph.getParam( "batchCount", 1 ))
-
 
 ph.checkUnusedParams()
 np.random.seed(randSeed)
@@ -57,9 +59,6 @@ print('')
 print("\nUsing parameters:\n"+ph.paramsToString())
 
 recursionDepth = 0
-
-fromSim = 1018
-toSim = fromSim
 
 dirIDs = np.linspace(fromSim, toSim, (toSim-fromSim+1),dtype='int16')
 lowfilename = "density_low_%04d.npz"
@@ -82,7 +81,7 @@ if useScaledData:
 	mfh = ["density", "velocity"] if not useDataBlocks else ["density", "velocity", "density", "velocity", "density", "velocity" ]
 	moh  = [0,0] if not useDataBlocks else [0,0,1,1,2,2]
 
-floader = fdl.FluidDataLoader( print_info=1, base_path=sim_path, filename=lowfilename, oldNamingScheme=False, filename_y=highfilename, filename_index_max=200, indices=dirIDs, data_fraction=0.5, multi_file_list=mfl, multi_file_idxOff=mol, multi_file_list_y=mfh , multi_file_idxOff_y=moh)
+floader = fdl.FluidDataLoader( print_info=1, base_path=sim_path, filename=lowfilename, oldNamingScheme=False, filename_y=highfilename, filename_index_max=indexMax, indices=dirIDs, data_fraction=0.5, multi_file_list=mfl, multi_file_idxOff=mol, multi_file_list_y=mfh , multi_file_idxOff_y=moh)
 x, y, xFilenames  = floader.get()
 
 tile_format='NYXC'

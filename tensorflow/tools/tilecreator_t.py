@@ -209,10 +209,10 @@ class TileCreator(object):
 		self.part_test=partTest/all
 		
 		# PRINT INFO
-		TC_setup_info = '\n'
+		TC_setup_info = {'0' : '\n'} # workarond for closures in python2.x
 		def addInfoLine(line):
-			nonlocal TC_setup_info
-			TC_setup_info += line + '\n'
+			#nonlocal TC_setup_info
+			TC_setup_info['0'] += line + '\n'
 		
 		#print('Dimension: {}, time dimension: {}'.format(self.dim,self.dim_t))
 		addInfoLine('Main data:')
@@ -635,7 +635,7 @@ class TileCreator(object):
 			batch[DATA_KEY_SCALED] = np.asarray(batch[DATA_KEY_SCALED])
 		
 		if self.dim==2 and squeezeZ:
-			TCDebug('squeeze z dimension')
+			self.TCDebug('squeeze z dimension')
 			#(tiles, block, z,y,x,c)
 			batch[DATA_KEY_MAIN] = np.squeeze(batch[DATA_KEY_MAIN], axis=2)
 			if self.dataIsActive(DATA_KEY_SCALED):
@@ -643,7 +643,7 @@ class TileCreator(object):
 		
 		#collapse blockSize=1
 		if squeezeBlocks and blockSize==1:
-			TCDebug('squeeze block dimension')
+			self.TCDebug('squeeze block dimension')
 			#(tiles, block, z,y,x,c)
 			batch[DATA_KEY_MAIN] = np.squeeze(batch[DATA_KEY_MAIN], axis=1)
 			if self.dataIsActive(DATA_KEY_SCALED):
