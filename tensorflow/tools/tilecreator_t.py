@@ -121,32 +121,74 @@ class TileCreator(object):
 		else:
 			self.TCError('Simulation size mismatch.')
 		self.simSizeLow = np.asarray(self.simSizeLow)
+		#SCALE FACTOR (UPRES) (don't confuse self.upres (this) and self.scaleFactor (augmentation))
+		if np.isscalar(scaleFactor):
+			self.upres = [scaleFactor, scaleFactor, scaleFactor]
+		elif len(scaleFactor)==2 and self.dim==2:
+			self.upres = [1]+scaleFactor
+		elif len(scaleFactor)==3:
+			self.upres = scaleFactor
+		else:
+			self.TCError('Scale factor size mismatch.')
+		self.upres = np.asarray(self.upres)
+		
 		
 		if self.dim==2:
 			self.tileSizeLow[0]=1
 			self.simSizeLow[0]=1
-		
-		#if scaleFactor < 1:
-		#	self.TCError('Upres must be at least 1.')
-		self.upres = scaleFactor
-		if useScaledData:
-			self.tileSizeHigh = self.tileSizeLow*scaleFactor
-			self.simSizeHigh = self.simSizeLow*scaleFactor
-			if self.dim==2:
-				self.tileSizeHigh[0]=1
-				self.simSizeHigh[0]=1
+			self.upres[0]=1
 		#else:
 		#	self.tileSizeHigh = np.asarray([1])
 		#	self.simSizeHigh = np.asarray([1])
 		
+		
+		# todo ckeck valid main sizes
+		if not self.isIntArray(self.simSizeLow):
+			self.TCError('Sim size must be integer.')
+		if not self.isIntArray(self.tileSizeLow):
+			self.TCError('Tile size must be integer.')
+		# check valid scale factor
+		minUpresStep = 0.125
+		if not np.all(np.mod(array,minUpresStep)==0):
+			self.TCError('Tile size must be a multiple of {}.'.format(minUpresStep))
+		#self.TCDebug('Main size: sim {}, tile {}.'.format(self.simSizeLow, self.tileSizeLow))
+		
+		self.tileFactor = self.tileSizeLow/self.simSizeLow
+		if self.dim==2:
+			self.tileFactor = self.tileFactor[1:]
+		
 		if np.less(self.simSizeLow, self.tileSizeLow).any():
-			self.TCError('Tile size {} can not be larger than sim size {}, {}.'.format(self.tileSizeLow,self.simSizeLow))
+			self.TCError('Tile size {} can not be larger than sim size {}.'.format(self.tileSizeLow,self.simSizeLow))
 		
 		
 		if densityMinimum<0.:
 			self.TCError('densityMinimum can not be negative.')
 		self.densityMinimum = densityMinimum
 		self.useDataAug = False
+		
+		# SCALED DATA
+		if useScaledData:
+			# preliminary checks
+			# valid scaleFactor
+			if(np.less(self.upres, np.ones(3)).any):
+				self.TCError('Scale factor must be at least one for every dimension. Swap main and scaled data and invert the scale factor.')
+			# main sizes compatible
+			if not self.isIntArray(self.simSizeLow*self.upres):
+				self.TCError('Main sim size {} is not compatible with the scale factor {}.'.format(self.simSizeLow, self.upres))
+			if not self.isIntArray(self.tileSizeLow*self.upres):
+				self.TCError('Main tile size {} is not compatible with the scale factor {}.'.format(self.tileSizeLow, self.upres))
+			
+			# calculate scaled sizes
+			self.tileSizeHigh = self.tileSizeLow*self.upres
+			self.simSizeHigh = self.simSizeLow*self.upres
+			if self.dim==2:
+				self.tileSizeHigh[0]=1
+				self.simSizeHigh[0]=1
+			# check valid scaled. checked before, but just in case..
+			if not self.isIntArray(self.simSizeHigh) or not self.isIntArray(self.tileSizeHigh):
+				self.TCError('Scale factor {} with main sim size {} and main tile size {} would result in illegal scaled sizes. Scaled sim {} and tile {} sizes must be integer.'.format(self.upres, self.simSizeLow, self.tileSizeLow, self.simSizeHigh, self.tileSizeHigh))
+			self.tileSizeHigh = self.tileSizeHigh.astype(int)
+			self.simSizeHigh = self.simSizeHigh.astype(int)
 		
 		#CHANNELS
 		self.c_lists = {}
@@ -216,7 +258,8 @@ class TileCreator(object):
 		
 		#print('Dimension: {}, time dimension: {}'.format(self.dim,self.dim_t))
 		addInfoLine('Main data:')
-		
+		addInfoLine('  sim size: {}'.format(self.simSizeLow))
+		addInfoLine('  tile size: {}'.format(self.tileSizeLow))
 		addInfoLine('  channel layout: {}'.format(self.c_low))
 		addInfoLine('  default channels: {}'.format(self.c_lists[DATA_KEY_MAIN][C_KEY_DEFAULT]))
 		if len(self.c_lists[DATA_KEY_MAIN][C_KEY_VELOCITY])>0: 
@@ -228,6 +271,8 @@ class TileCreator(object):
 		if not useScaledData:
 			addInfoLine('  not in use')
 		else:
+			addInfoLine('  sim size: {}'.format(self.simSizeHigh))
+			addInfoLine('  tile size: {}'.format(self.tileSizeHigh))
 			addInfoLine('  channel layout: {}'.format(self.c_high))
 			addInfoLine('  default channels: {}'.format(self.c_lists[DATA_KEY_SCALED][C_KEY_DEFAULT]))
 			if len(self.c_lists[DATA_KEY_SCALED][C_KEY_VELOCITY])>0: 
@@ -308,9 +353,14 @@ class TileCreator(object):
 		msg = 'setup data augmentation: '
 
 		if rot==2:
+			#TODO check tile sizes for bounds
+			self.rotScaleFactor = 1.6
+			if np.greater(self.tileFactor, np.ones_like(self.tileFactor)/self.rotScaleFactor).any():
+				self.TCError('Tiles are too large for random rotation (rot=1) augmentation. Use smaller tiles or rot=2.')
 			self.do_rotation = True
 			self.do_rot90 = False
 			msg += 'rotation, '
+			
 		elif rot==1:
 			self.do_rotation = False
 			self.do_rot90 = True
@@ -331,6 +381,9 @@ class TileCreator(object):
 		if (self.scaleFactor[0]==1 and self.scaleFactor[1]==1):
 			self.do_scaling = False
 		else:
+			#TODO check tile sizes for bounds
+			if np.greater(self.tileFactor, np.ones_like(self.tileFactor)*self.scaleFactor[0]).any():
+				self.TCError('Tiles are too large for minimum scaling augmentation {}. Use smaller tiles or a larger minimum.'.format(self.scaleFactor[0]))
 			self.do_scaling = True
 			msg += 'scaling, '
 			
@@ -635,7 +688,7 @@ class TileCreator(object):
 			batch[DATA_KEY_SCALED] = np.asarray(batch[DATA_KEY_SCALED])
 		
 		if self.dim==2 and squeezeZ:
-			TCDebug('squeeze z dimension')
+			self.TCDebug('squeeze z dimension')
 			#(tiles, block, z,y,x,c)
 			batch[DATA_KEY_MAIN] = np.squeeze(batch[DATA_KEY_MAIN], axis=2)
 			if self.dataIsActive(DATA_KEY_SCALED):
@@ -643,7 +696,7 @@ class TileCreator(object):
 		
 		#collapse blockSize=1
 		if squeezeBlocks and blockSize==1:
-			TCDebug('squeeze block dimension')
+			self.TCDebug('squeeze block dimension')
 			#(tiles, block, z,y,x,c)
 			batch[DATA_KEY_MAIN] = np.squeeze(batch[DATA_KEY_MAIN], axis=1)
 			if self.dataIsActive(DATA_KEY_SCALED):
@@ -681,12 +734,19 @@ class TileCreator(object):
 		#cut a tile for faster transformation
 		if self.do_scaling or self.do_rotation:
 			factor = 1
+			preCutTileSize = self.tile_shape_low
 			if self.do_rotation: # or self.do_scaling:
-				factor*=1.5 # scaling: to avoid size errors caused by rounding
+				factor*=self.rotScaleFactor #1.6 # scaling: to avoid size errors caused by rounding, could be off if data is not square/cubic
+				preCutTileSize = np.ceil(preCutTileSize * self.rotScaleFactor)
 			if self.do_scaling:
 				scaleFactor = np.random.uniform(self.scaleFactor[0], self.scaleFactor[1])
 				factor/= scaleFactor 
+				preCutTileSize = np.ceil(preCutTileSize / scaleFactor)
 			tileShapeLow = np.ceil(self.tile_shape_low*factor)
+			self.TCDebug('Pre-cut size old {}, new {}.'.format(tileShapeLow, preCutTileSize))
+			if not self.isValidMainTileShapeChannels(tileShapeLow):
+				self.TCWarning('Augmentation pre-cutting results in larger than frame tile. Trying with frame size...')
+				tileShapeLow = self.frame_shape_low
 			if self.dim==2:
 				tileShapeLow[0] = 1
 			data[DATA_KEY_MAIN], data[DATA_KEY_SCALED] = self.getRandomTile(data[DATA_KEY_MAIN], data[DATA_KEY_SCALED], tileShapeLow.astype(int))
@@ -696,12 +756,14 @@ class TileCreator(object):
 		if self.do_scaling:
 			data = self.scale(data, scaleFactor)
 		
-		
 		bounds = np.zeros(4)
 		
 		#rotate
 		if self.do_rotation:
 			bounds = np.array(self.getTileShape(data[DATA_KEY_MAIN]))*0.16 #bounds applied on all sides, 1.5*(1-2*0.16)~1
+			# make sure bounds is compatible with upRes
+			if self.dataIsActive(DATA_KEY_SCALED):
+				bounds = self.makeValidMainShape(bounds, ceil=True)
 			data = self.rotate(data)
 		
 		#get a tile
@@ -810,7 +872,7 @@ class TileCreator(object):
 		if tileShapeLow is None:
 			tileShapeLow = np.copy(self.tile_shape_low) # use copy is very important!!!
 		tileShapeHigh = tileShapeLow*self.upres
-		if  not self.isValidMainTileShape(tileShapeLow):
+		if  not self.isValidMainTileShapeChannels(tileShapeLow):
 			self.TCErrorInternal('Invalid tile shape')
 		if not self.isFrameSequence(low): #len(low.shape)!=5 or len(tileShapeLow)!=4:
 			self.TCErrorInternal('MAIN data is no sequence')
@@ -821,7 +883,7 @@ class TileCreator(object):
 		start = np.ceil(bounds)
 		end = frameShapeLow - tileShapeLow + np.ones(4) - start
 		
-		offset_up = np.array([self.upres, self.upres, self.upres])
+		offset_up = self.upres #np.array([self.upres, self.upres, self.upres])
 		
 		if self.dim==2:
 			start[0] = 0
@@ -836,16 +898,21 @@ class TileCreator(object):
 		# cut tile
 		hasMinDensity = False
 		i = 1
-		while (not hasMinDensity) and i<20:
+		while (not hasMinDensity):
 			offset = np.asarray([randrange(start[0], end[0]), randrange(start[1], end[1]), randrange(start[2], end[2])])
+			# TODO test; this uses global shapes, not the local ones
+			offset = self.makeValidMainShape(offset, ceil=False)
 			lowTile = self.cutTile(low, tileShapeLow, offset)
-			offset *= offset_up
+			offset = (offset * offset_up).astype(int)
 			if high is not None:
 				highTile = self.cutTile(high, tileShapeHigh, offset)
 			else:
 				highTile = None
 			hasMinDensity = self.hasMinDensity(lowTile)
 			i+=1
+			if i>=20:
+				self.TCInfo('Could not cut tile with minimum average density {} after {} tries. Using last one with average density {}.'.format(self.densityMinimum, 20, self.getTileDensity(lowTile)))
+				break
 		return lowTile, highTile
 
 #####################################################################################
@@ -1142,12 +1209,34 @@ class TileCreator(object):
 	
 	def isFrameSingle(self, data):
 		return len(data.shape)==DATA_DIM_LENGTH_SINGLE
+		
 	
 	def isValidMainTileShape(self, shape):
-		if len(shape)!=DATA_DIM_LENGTH_SINGLE: return False
+		'''
+			includes channels
+		'''
+		if not self.isIntArray(shape): return False
+		if len(shape)!=(DATA_DIM_LENGTH_SINGLE-1): return False
+		# check compatible to scale factor
 		# smaller than frame
-		self.frame_shape_low
 		if np.less(self.simSizeLow, shape[:-1]).any(): return False
+		return True
+		
+	def isValidMainTileShapeChannels(self, shape):
+		'''
+			includes channels
+		'''
+		if not self.isIntArray(shape): return False
+		if len(shape)!=DATA_DIM_LENGTH_SINGLE: return False
+		# check compatible to scale factor
+		# smaller than frame
+		if np.less(self.simSizeLow, shape[:-1]).any(): return False
+		return True
+	
+	def isScaleCompatibleMainTileShape(self, shape):
+		if not self.isValidMainTileShape(shape): return False
+		# check compatible to scale factor
+		if not self.isIntArray(self.simSizeLow*self.upres): return False
 		return True
 	
 	def getTileShape(self, data):
@@ -1155,11 +1244,28 @@ class TileCreator(object):
 		if self.isFrameSequence(data): return data.shape[1:]
 		elif self.isFrameSingle(data): return data.shape[:]
 		else: self.TCError('Can\'t get tile shape from data with shape {}'.format(data.shape))
+		
+	def getMinValidMainStep(self):
+		# lcm of 1 and self.upres #TODO test
+		return (np.lcm(np.ones_like(self.upres), self.upres)/self.upres).astype(int)
+		
+	def makeValidMainShape(self, shape, ceil=True):
+		if self.isValidMainTileShape(shape): return np.array(shape) # nothing to do
+		# per component: find next larger valid value
+		minStep = self.getMinValidMainStep()
+		if ceil:
+			return (shape * np.ceil(shape / minStep)).astype(int)
+		else:
+			return (shape * np.floor(shape / minStep)).astype(int)
 	
 	def getFrameTiles(self, index):
 		''' returns the frame as tiles'''
 		low, high = self.getDatum(index)
 		return self.createTiles(low, self.tile_shape_low), self.createTiles(high, self.tile_shape_high)
+		
+	def isIntArray(self, array):
+		return np.all(np.mod(array,1)==0)
+		
 
 #####################################################################################
 # CHANNEL PARSING
@@ -1362,10 +1468,11 @@ def savePngs(tiles, path, tile_format='NYXC', imageCounter=0, tiles_in_image=[1,
 		tileShape[full_format.index(dim)] = shape[tile_format.index(dim)]
 	
 	# to full 'nbyxc' format
+	#print('tile shape {}'.format(tileShape))
 	tiles = np.reshape(tiles, tileShape)
 	
 	
-	noImages = shape[0]//tilesInImage
+	noImages = tileShape[0]//tilesInImage
 	if save_gif:
 		gif=[]
 		

@@ -38,6 +38,9 @@ rot: type of rotation augmentation (NOT an angle limit). 1: fixed 90° roatations
 minScale, maxScale: limits for scaling. set both to 1 to disable scaling.
 flip: flipping (mirroring) of data
 
+1.2 Using block data from fluiddataloader
+The fluiddataloader merges blocks into channels. Use tc.blockFromChannelsToSequence(data, blockLength) to convert the data to the required format.
+
 2. Adding data
 TC.addData(main, scaled=None, labels=None, blocks=None)
 
@@ -58,3 +61,5 @@ squeezeBlocks: whether to squeeze/collapse the block dimension/axis of main (and
 
 returns:
 main[,scaled][,labels]: main and scaled are np.ndarray with shape: n[,b][,z],y,x,c with z,y,x mathching the (scaled) tile size and c channels. labels is a list
+
+4. Image output
