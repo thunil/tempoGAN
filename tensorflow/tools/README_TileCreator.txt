@@ -8,7 +8,10 @@ optional second set of sturctured data with dimensionality and size matching the
 arbitrary label alongside the structured data
 
 
-
+0. Dependencies
+numpy v1.14.0 (v1.15.4)
+scipy v0.18.1
+imageio v2.1.2
 
 1. Setup
 import tilecreator_t as tc

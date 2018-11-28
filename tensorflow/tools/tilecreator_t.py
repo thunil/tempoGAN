@@ -149,7 +149,7 @@ class TileCreator(object):
 			self.TCError('Tile size must be integer.')
 		# check valid scale factor
 		minUpresStep = 0.125
-		if not np.all(np.mod(array,minUpresStep)==0):
+		if not np.all(np.mod(self.upres,minUpresStep)==0):
 			self.TCError('Tile size must be a multiple of {}.'.format(minUpresStep))
 		#self.TCDebug('Main size: sim {}, tile {}.'.format(self.simSizeLow, self.tileSizeLow))
 		
@@ -170,8 +170,8 @@ class TileCreator(object):
 		if useScaledData:
 			# preliminary checks
 			# valid scaleFactor
-			if(np.less(self.upres, np.ones(3)).any):
-				self.TCError('Scale factor must be at least one for every dimension. Swap main and scaled data and invert the scale factor.')
+			if np.less(self.upres, np.ones(3)).any():
+				self.TCError('Scale factor ({}) must be at least one for every dimension.'.format(self.upres))
 			# main sizes compatible
 			if not self.isIntArray(self.simSizeLow*self.upres):
 				self.TCError('Main sim size {} is not compatible with the scale factor {}.'.format(self.simSizeLow, self.upres))
@@ -743,12 +743,13 @@ class TileCreator(object):
 				factor/= scaleFactor 
 				preCutTileSize = np.ceil(preCutTileSize / scaleFactor)
 			tileShapeLow = np.ceil(self.tile_shape_low*factor)
+			if self.dim==2:
+				tileShapeLow[0] = 1
+				preCutTileSize[0] = 1
 			self.TCDebug('Pre-cut size old {}, new {}.'.format(tileShapeLow, preCutTileSize))
 			if not self.isValidMainTileShapeChannels(tileShapeLow):
 				self.TCWarning('Augmentation pre-cutting results in larger than frame tile. Trying with frame size...')
 				tileShapeLow = self.frame_shape_low
-			if self.dim==2:
-				tileShapeLow[0] = 1
 			data[DATA_KEY_MAIN], data[DATA_KEY_SCALED] = self.getRandomTile(data[DATA_KEY_MAIN], data[DATA_KEY_SCALED], tileShapeLow.astype(int))
 		
 		
@@ -761,12 +762,13 @@ class TileCreator(object):
 		#rotate
 		if self.do_rotation:
 			bounds = np.array(self.getTileShape(data[DATA_KEY_MAIN]))*0.16 #bounds applied on all sides, 1.5*(1-2*0.16)~1
-			# make sure bounds is compatible with upRes
-			if self.dataIsActive(DATA_KEY_SCALED):
-				bounds = self.makeValidMainShape(bounds, ceil=True)
 			data = self.rotate(data)
 		
 		#get a tile
+		# make sure bounds is compatible with upRes
+		self.TCDebug('Bounds {}.'.format(bounds))
+		bounds = self.makeValidMainShape(bounds, ceil=True)
+		self.TCDebug('Bounds {}.'.format(bounds))
 		data[DATA_KEY_MAIN], data[DATA_KEY_SCALED] = self.getRandomTile(data[DATA_KEY_MAIN], data[DATA_KEY_SCALED], bounds=bounds) #includes "shifting"
 		
 		if self.do_rot90:
@@ -871,7 +873,7 @@ class TileCreator(object):
 		
 		if tileShapeLow is None:
 			tileShapeLow = np.copy(self.tile_shape_low) # use copy is very important!!!
-		tileShapeHigh = tileShapeLow*self.upres
+		tileShapeHigh = self.makeHighShape(tileShapeLow, format='zyxc')
 		if  not self.isValidMainTileShapeChannels(tileShapeLow):
 			self.TCErrorInternal('Invalid tile shape')
 		if not self.isFrameSequence(low): #len(low.shape)!=5 or len(tileShapeLow)!=4:
@@ -1219,7 +1221,7 @@ class TileCreator(object):
 		if len(shape)!=(DATA_DIM_LENGTH_SINGLE-1): return False
 		# check compatible to scale factor
 		# smaller than frame
-		if np.less(self.simSizeLow, shape[:-1]).any(): return False
+		if np.less(self.simSizeLow, shape).any(): return False
 		return True
 		
 	def isValidMainTileShapeChannels(self, shape):
@@ -1247,16 +1249,39 @@ class TileCreator(object):
 		
 	def getMinValidMainStep(self):
 		# lcm of 1 and self.upres #TODO test
-		return (np.lcm(np.ones_like(self.upres), self.upres)/self.upres).astype(int)
+		if self.dataIsActive(DATA_KEY_SCALED):
+			# TODO lcm does not work with float
+			return (np.lcm(np.ones_like(self.upres), self.upres)/self.upres).astype(int)
+		else:
+			return 1.0
 		
 	def makeValidMainShape(self, shape, ceil=True):
 		if self.isValidMainTileShape(shape): return np.array(shape) # nothing to do
 		# per component: find next larger valid value
 		minStep = self.getMinValidMainStep()
 		if ceil:
-			return (shape * np.ceil(shape / minStep)).astype(int)
+			return (minStep * np.ceil(shape / minStep)).astype(int)
 		else:
-			return (shape * np.floor(shape / minStep)).astype(int)
+			return (minStep * np.floor(shape / minStep)).astype(int)
+			
+	def makeHighShape(self, shape, format='zyx'):
+		format = format.lower()
+		if len(shape) != len(format):
+			self.TCErrorInternal('Shape {} does not match shape format \'{}\'.'.format(shape, format))
+		upRes = np.copy(self.upres)
+		
+		if format == 'zyx':
+			pass
+		elif format == 'bzyx':
+			upRes = np.array((1,upRes[0],upRes[1],upRes[2]))
+		elif format == 'zyxc':
+			upRes = np.array((upRes[0],upRes[1],upRes[2],1))
+		elif format == 'bzyxc':
+			upRes = np.array((1,upRes[0],upRes[1],upRes[2],1))
+		else:
+			self.TCErrorInternal('Unkown shape format \'{}\'.'.format(format))
+		
+		return (shape*upRes).astype(int)
 	
 	def getFrameTiles(self, index):
 		''' returns the frame as tiles'''

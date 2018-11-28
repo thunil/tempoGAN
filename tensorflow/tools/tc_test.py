@@ -21,32 +21,36 @@ import paramhelpers as ph
 
 
 out_path		=	 ph.getParam( "basePath",		'../test_out/' )
-sim_path		=	 ph.getParam( "basePath",		'../data_sim/' )
+sim_path		=	 ph.getParam( "simPath",		'../data_sim/' )
 randSeed		= int(ph.getParam( "randSeed",		1 )) 				# seed for np and tf initialization
 
 simSizeHigh  	= int(ph.getParam( "simSizeHigh", 		256 )) 			# size of high res sim
 tileSizeHigh 	= int(ph.getParam( "tileSizeHigh", 		64 )) 			# size of high res tiles
 simSizeLow  	= int(ph.getParam( "simSizeLow", 		64 )) 			# size of low res sim
 tileSizeLow 	= int(ph.getParam( "tileSizeLow", 		16 )) 			# size of low res tiles
-upRes	  		= int(ph.getParam( "upRes", 		4 )) 				# single generator scaling factor
-dim   = int(ph.getParam( "dim",		 2 )) 				# dimension of dataset
+upRes	  		= float(ph.getParam( "upRes", 		4 )) 				# single generator scaling factor
+dim   = int(ph.getParam( "dim",		 2 )) 								# dimension of dataset
 
-useVel = int(ph.getParam( "vel", 1 ))
-augment = int(ph.getParam( "aug", 1 ))		 # use dataAugmentation or not
+useDummyData	= int(ph.getParam( "dummyData",		0 ))				# create dummy arrays instead of loading real data
+dummySizeLow	= int(ph.getParam( "dummyLow",		simSizeLow ))				# sim size of dummy data if used. use to test size mismatches
+dummySizeHigh	= int(ph.getParam( "dummyHigh",		simSizeHigh ))				#
+
+useVel = int(ph.getParam( "vel", 1 ))									# currently not in use
+augment = int(ph.getParam( "aug", 1 ))									# use dataAugmentation or not
 
 # no high res data in TC, using high data in TC's low res
 useScaledData = int(ph.getParam( "scaled", 0 ))
-mainIsLow = int(ph.getParam( "mainIsLow", 0 ))
+mainIsLow = int(ph.getParam( "mainIsLow", 1 if useScaledData else 0 ))							# use high or low data as main data. TileCreator requires the main data to be the smaller one.
 
 useLabelData = int(ph.getParam( "label", 0 ))
 useDataBlocks = int(ph.getParam( "block", 0 ))
 blockSize = int(ph.getParam( "blockSize", 1 ))
 
-batchCount = int(ph.getParam( "batchCount", 1 ))
+batchCount = int(ph.getParam( "batchCount", 1 ))						# number of batches to create
 saveImages = int(ph.getParam( "img", 1 ))
 saveRef = int(ph.getParam( "ref", 0 ))
 
-fail = int(ph.getParam( "fail", 0 ))
+fail = int(ph.getParam( "fail", 0 ))									# wether the test is supposed to fail. used for output to indicate a "successful fail".
 
 ph.checkUnusedParams()
 np.random.seed(randSeed)
@@ -106,7 +110,7 @@ dirIDs = np.linspace(fromSim, toSim, (toSim-fromSim+1),dtype='int16')
 lowfilename = "density_low_%04d" + fileType
 highfilename = "density_high_%04d" + fileType
 
-
+# this is no longer supported by the TileCreator. main must always be the smaller one.
 if mainIsLow:
 	if not useScaledData:
 		highfilename = None
@@ -138,16 +142,27 @@ if useScaledData:
 	mfh = ["density", "velocity"] if not useDataBlocks else ["density", "velocity", "density", "velocity", "density", "velocity" ]
 	moh  = [0,0] if not useDataBlocks else [0,0,1,1,2,2]
 
-pt1_start = time.perf_counter()
-pt2_start = time.process_time()
-floader = fdl.FluidDataLoader( print_info=1, base_path=sim_path, filename=lowfilename, oldNamingScheme=False, filename_y=highfilename, filename_index_min=index_min, filename_index_max=index_max, indices=dirIDs, data_fraction=0.5, multi_file_list=mfl, multi_file_idxOff=mol, multi_file_list_y=mfh , multi_file_idxOff_y=moh)
-x, y, xFilenames  = floader.get()
-pt2_end = time.process_time()
-pt1_end = time.perf_counter()
-pt1 = pt1_end - pt1_start
-pt2 = pt2_end - pt2_start
-print('Loading Process Time: Total {:.04f}s; avg/frame {:.04f}s'.format(pt2,pt2/len(x)))
-print('Loading Time: Total {:.04f}s; avg/frame {:.04f}s'.format(pt1,pt1/len(x)))
+if not useDummyData:
+	print('\n  - LOADING DATA -\n')
+	pt1_start = time.perf_counter()
+	pt2_start = time.process_time()
+	floader = fdl.FluidDataLoader( print_info=1, base_path=sim_path, filename=lowfilename, oldNamingScheme=False, filename_y=highfilename, filename_index_min=index_min, filename_index_max=index_max, indices=dirIDs, data_fraction=0.5, multi_file_list=mfl, multi_file_idxOff=mol, multi_file_list_y=mfh , multi_file_idxOff_y=moh)
+	x, y, xFilenames  = floader.get()
+	pt2_end = time.process_time()
+	pt1_end = time.perf_counter()
+	pt1 = pt1_end - pt1_start
+	pt2 = pt2_end - pt2_start
+	print('Loading Process Time: Total {:.04f}s; avg/frame {:.04f}s'.format(pt2,pt2/len(x)))
+	print('Loading Time: Total {:.04f}s; avg/frame {:.04f}s'.format(pt1,pt1/len(x)))
+	
+else:
+	print('\n  - CREATING DATA -\n')
+	shapeLow = (40 ,(dummySizeLow if dim==3 else 1),dummySizeLow,dummySizeLow, dim+1)
+	shapeHigh = (40 ,(dummySizeHigh if dim==3 else 1),dummySizeHigh,dummySizeHigh, dim+1)
+	
+	x = np.ones(shapeLow if mainIsLow else shapeHigh)
+	if useScaledData:
+		y = np.ones(shapeHigh if mainIsLow else shapeLow)
 
 
 tile_format='NYXC'
@@ -189,11 +204,13 @@ channel_layout = 'd,vx,vy'
 if dim==3:
 	channel_layout += ',vz'
 # tilecreator
+print('\n  - INIT TILECREATOR -\n')
 try:
 	TC = tc.TileCreator(tileSize=tileSize, simSize=simSize , dim=dim, densityMinimum=0.1, scaleFactor=upRes, channelLayout_main=channel_layout, channelLayout_scaled=channel_layout, useScaledData=useScaledData, useLabels=useLabelData, useDataBlocks=useDataBlocks, logLevel=10)
 except tc.TilecreatorError as e:
 	testFailed('TileCreator Error on construction')
 if augment:
+	print('\n  - INIT DATA AUGMENTATION -\n')
 	try:
 		TC.initDataAugmentation(2)
 	except tc.TilecreatorError as e:
@@ -206,6 +223,7 @@ if dim==2:
 		y,_ = np.split(y, [3], axis=-1)
 
 # add low data with dummy labels
+print('\n  - ADDING DATA -\n')
 try:
 	TC.addData(x, y if useScaledData else None, l, b)
 except tc.TilecreatorError as e:
@@ -216,6 +234,7 @@ except tc.TilecreatorError as e:
 
 #test batch:
 if True:
+	print('\n  - CREATING BATCH -\n')
 	imageCounter=0
 	pt1_start = time.perf_counter()
 	pt2_start = time.process_time()
@@ -271,5 +290,8 @@ if False:
 		tc.savePngsGrayscale(tile, test_path + 'rec_{}_'.format(r),imageCounter=0, tiles_in_image=[1,1], channels=[0], save_rgb = [[1,2]], rgb_interval=[-2,2], plot_vel_x_y=False)
 
 print('')
-print('--- TEST FINISHED ---')
+if fail:
+	print('--- TEST FINISHED DESPITE INDICATED FAILURE---')
+else:
+	print('--- TEST FINISHED ---')
 print('')
