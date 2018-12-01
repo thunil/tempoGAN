@@ -9,7 +9,7 @@ arbitrary label alongside the structured data
 
 
 0. Dependencies
-numpy v1.14.0 (v1.15.4)
+numpy v1.14.0 (v1.15.4 for scaled data)
 scipy v0.18.1
 imageio v2.1.2
 

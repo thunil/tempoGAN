@@ -19,7 +19,7 @@ import fluiddataloader as fdl
 import numpy as np
 import paramhelpers as ph
 
-
+test_name		= ph.getParam( "title",		'' )
 out_path		=	 ph.getParam( "basePath",		'../test_out/' )
 sim_path		=	 ph.getParam( "simPath",		'../data_sim/' )
 randSeed		= int(ph.getParam( "randSeed",		1 )) 				# seed for np and tf initialization
@@ -59,9 +59,14 @@ np.random.seed(randSeed)
 
 #if not os.path.exists(out_path):
 #	os.makedirs(out_path)
-test_path,_ = ph.getNextTestPath(0, out_path)
+test_path, test_no = ph.getNextTestPath(0, out_path)
 sys.stdout = ph.Logger(test_path)
 sys.stderr = ph.ErrorLogger(test_path)
+
+def writeSummary(msg):
+	# write summary to test overview
+	with open(out_path + 'test_overview.log', "a") as text_file:
+		text_file.write(msg + '\n')
 
 def testFailed(msg):
 	print('\n{}:\n{}'.format(msg, traceback.format_exc()))
@@ -69,10 +74,12 @@ def testFailed(msg):
 		print('')
 		print('--- TEST FAILED AS INDICATED ---')
 		print('')
+		writeSummary('SUCCESS: Test {} \"{}\" failed as indicated with error {}'.format(test_no, test_name, msg))
 	else:
 		print('')
 		print('--- TEST FAILED ---')
 		print('')
+		writeSummary('FAILURE: Test {} \"{}\" failed with error {}'.format(test_no, test_name, msg))
 	exit()
 
 print('')
@@ -114,7 +121,7 @@ highfilename = "density_high_%04d" + fileType
 if mainIsLow:
 	if not useScaledData:
 		highfilename = None
-		upRes = 1
+		#upRes = 1
 	simSize = simSizeLow
 	tileSize = tileSizeLow
 else:
@@ -125,7 +132,7 @@ else:
 		upRes = 1/upRes
 	else:
 		highfilename = None
-		upRes = 1
+		#upRes = 1
 	simSize = simSizeHigh
 	tileSize = tileSizeHigh
 #if useVel:
@@ -250,6 +257,7 @@ if True:
 		#tileShape = (batch[0].shape[0],tileSize,tileSize,batch[0].shape[-1])
 		tiles = batch[i]
 		i+=1
+		if len(tiles.shape) != len(tile_format): tile_format = 'NYXC' # squeeded active block data if blockSize=1
 		#print('tiles_x shape: {}'.format(tiles.shape))
 		if dim==3: tiles = (tiles[2:6,6:8] if useScaledData else tiles[2:6,24:32])
 		if saveImages: ic=tc.savePngs(tiles, test_path, tile_format=tile_format,imageCounter=imageCounter, tiles_in_image=[1,1], plot_vel_x_y=False, channels=[0], save_rgb = rgb_channels, rgb_interval=rgb_range)
@@ -292,6 +300,10 @@ if False:
 print('')
 if fail:
 	print('--- TEST FINISHED DESPITE INDICATED FAILURE---')
+	writeSummary('FAILURE: Test {} \"{}\" finished despite indicated failure'.format(test_no, test_name))
 else:
 	print('--- TEST FINISHED ---')
+	writeSummary('SUCCESS: Test {} \"{}\" finished'.format(test_no, test_name))
 print('')
+
+
