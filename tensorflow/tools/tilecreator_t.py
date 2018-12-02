@@ -366,7 +366,7 @@ class TileCreator(object):
 		msg = 'setup data augmentation: '
 
 		if rot==2:
-			#TODO check tile sizes for bounds
+			#check tile sizes for bounds
 			self.rotScaleFactor = 1.6
 			if np.greater(self.tileFactor, np.ones_like(self.tileFactor)/self.rotScaleFactor).any():
 				self.TCError('Tiles are too large for random rotation (rot=1) augmentation. Use smaller tiles or rot=2.')
@@ -394,11 +394,17 @@ class TileCreator(object):
 		if (self.scaleFactor[0]==1 and self.scaleFactor[1]==1):
 			self.do_scaling = False
 		else:
-			#TODO check tile sizes for bounds
+			#check tile sizes for bounds
 			if np.greater(self.tileFactor, np.ones_like(self.tileFactor)*self.scaleFactor[0]).any():
 				self.TCError('Tiles are too large for minimum scaling augmentation {}. Use smaller tiles or a larger minimum.'.format(self.scaleFactor[0]))
 			self.do_scaling = True
 			msg += 'scaling, '
+			
+		# check tile size for rot AND min scale
+		if self.do_rotation and self.do_scaling:
+			if np.greater(self.tileFactor, np.ones_like(self.tileFactor)*self.scaleFactor[0]/self.rotScaleFactor).any():
+				self.TCError('Tiles are too large for combined rotation - minimum scaling ({}) augmentation . Use smaller tiles or a larger minimum.'.format(self.scaleFactor[0]))
+			
 			
 		self.do_flip = flip
 		if self.do_flip:
@@ -764,7 +770,7 @@ class TileCreator(object):
 			if not self.isValidMainTileShapeChannels(preCutTileSize):
 				self.TCWarning('Augmentation pre-cutting results in larger than frame tile. Trying with frame size...')
 				preCutTileSize = self.frame_shape_low
-			data[DATA_KEY_MAIN], data[DATA_KEY_SCALED] = self.getRandomTile(data[DATA_KEY_MAIN], data[DATA_KEY_SCALED], preCutTileSize.astype(int))
+			else: data[DATA_KEY_MAIN], data[DATA_KEY_SCALED] = self.getRandomTile(data[DATA_KEY_MAIN], data[DATA_KEY_SCALED], preCutTileSize.astype(int))
 		
 		
 		#random scaling, changes resolution
@@ -916,7 +922,7 @@ class TileCreator(object):
 			tileShapeHigh[0] = 1
 			
 		# check if possible to cut tile
-		if np.amin((end-start)[:3]) < 0:
+		if np.amin((end-start)[:3]) < 1:
 			self.TCErrorInternal('Can\'t cut tile {} from frame {} with bounds {}.'.format(tileShapeLow, frameShapeLow, start))
 	
 		# cut tile
@@ -1134,7 +1140,7 @@ class TileCreator(object):
 		
 		if len(data[DATA_KEY_MAIN].shape)==5: #frame sequence
 			scale = np.append([1],scale)
-		# to ensure high/low ration stays the same
+		# to ensure high/low ratio stays the same
 		scale = np.round(np.array(data[DATA_KEY_MAIN].shape) * scale )/np.array(data[DATA_KEY_MAIN].shape)
 			
 		#apply transform
