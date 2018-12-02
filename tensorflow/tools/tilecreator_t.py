@@ -264,10 +264,10 @@ class TileCreator(object):
 		self.part_test=partTest/all
 		
 		# PRINT INFO
-		TC_setup_info = '\n'
+		TC_setup_info = {'0' : '\n'} # workarond for closures in python2.x
 		def addInfoLine(line):
-			nonlocal TC_setup_info
-			TC_setup_info += line + '\n'
+			#nonlocal TC_setup_info
+			TC_setup_info['0'] += line + '\n'
 		
 		#print('Dimension: {}, time dimension: {}'.format(self.dim,self.dim_t))
 		addInfoLine('Main data:')

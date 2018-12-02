@@ -20,7 +20,7 @@ import numpy as np
 import paramhelpers as ph
 
 test_name		= ph.getParam( "title",		'' )
-out_path		=	 ph.getParam( "basePath",		'../test_out/' )
+out_path		=	 ph.getParam( "outPath",		'../test_out/' )
 sim_path		=	 ph.getParam( "simPath",		'../data_sim/' )
 randSeed		= int(ph.getParam( "randSeed",		1 )) 				# seed for np and tf initialization
 
@@ -32,20 +32,25 @@ upRes	  		= float(ph.getParam( "upRes", 		4 )) 				# single generator scaling fa
 dim   = int(ph.getParam( "dim",		 2 )) 								# dimension of dataset
 
 useDummyData	= int(ph.getParam( "dummyData",		0 ))				# create dummy arrays instead of loading real data
-dummySizeLow	= int(ph.getParam( "dummyLow",		simSizeLow ))				# sim size of dummy data if used. use to test size mismatches
-dummySizeHigh	= int(ph.getParam( "dummyHigh",		simSizeHigh ))				#
+dummySizeLow	= int(ph.getParam( "dummyLow",		simSizeLow ))		# sim size of dummy data if used. use to test size mismatches
+dummySizeHigh	= int(ph.getParam( "dummyHigh",		simSizeHigh ))		#
 
 useVel = int(ph.getParam( "vel", 1 ))									# currently not in use
 augment = int(ph.getParam( "aug", 1 ))									# use dataAugmentation or not
 
+# TODO integrate
+fromSim  = int(ph.getParam( "fromSim", 1018 ))							# 3006 for 3D
+toSim    = int(ph.getParam( "toSim",   fromSim ))	 
+indexMin = int(ph.getParam( "indexMin", 0 ))	 						# 30 for 3D
+indexMax = int(ph.getParam( "indexMax", 200 ))	 						# 60 for 3D
+
 # no high res data in TC, using high data in TC's low res
 useScaledData = int(ph.getParam( "scaled", 0 ))
-mainIsLow = int(ph.getParam( "mainIsLow", 1 if useScaledData else 0 ))							# use high or low data as main data. TileCreator requires the main data to be the smaller one.
+mainIsLow = int(ph.getParam( "mainIsLow", 1 if useScaledData else 0 ))	# use high or low data as main data. TileCreator requires the main data to be the smaller one.
 
 useLabelData = int(ph.getParam( "label", 0 ))
 useDataBlocks = int(ph.getParam( "block", 0 ))
-blockSize = int(ph.getParam( "blockSize", 1 ))
-
+blockSize = int(ph.getParam( "blockSize", 1 )) 
 batchCount = int(ph.getParam( "batchCount", 1 ))						# number of batches to create
 saveImages = int(ph.getParam( "img", 1 ))
 saveRef = int(ph.getParam( "ref", 0 ))
@@ -91,20 +96,20 @@ print("\nUsing parameters:\n"+ph.paramsToString())
 recursionDepth = 0
 
 if dim==2:
-	fromSim = 1018
-	index_min = 0
-	index_max = 200
+#	fromSim = 1018
+#	index_min = 0
+#	index_max = 200
 	fileType = '.npz'
 	rgb_channels = [[1,2]]
 	rgb_range = [-2,2]
 elif dim==3:
-	fromSim = 3006
-	if useScaledData:
-		index_min = 30
-		index_max = 60
-	else:
-		index_min = 30
-		index_max = 60
+#	fromSim = 3006
+#	if useScaledData:
+#		index_min = 30
+#		index_max = 60
+#	else:
+#		index_min = 30
+#		index_max = 60
 	fileType = '.npz'
 	rgb_channels = [[1,2,3]]
 	rgb_range = [-2,2]#[-0.1,0.1]
@@ -153,7 +158,7 @@ if not useDummyData:
 	print('\n  - LOADING DATA -\n')
 	pt1_start = time.perf_counter()
 	pt2_start = time.process_time()
-	floader = fdl.FluidDataLoader( print_info=1, base_path=sim_path, filename=lowfilename, oldNamingScheme=False, filename_y=highfilename, filename_index_min=index_min, filename_index_max=index_max, indices=dirIDs, data_fraction=0.5, multi_file_list=mfl, multi_file_idxOff=mol, multi_file_list_y=mfh , multi_file_idxOff_y=moh)
+	floader = fdl.FluidDataLoader( print_info=1, base_path=sim_path, filename=lowfilename, oldNamingScheme=False, filename_y=highfilename, filename_index_min=indexMin, filename_index_max=indexMax, indices=dirIDs, data_fraction=0.5, multi_file_list=mfl, multi_file_idxOff=mol, multi_file_list_y=mfh , multi_file_idxOff_y=moh)
 	x, y, xFilenames  = floader.get()
 	pt2_end = time.process_time()
 	pt1_end = time.perf_counter()
