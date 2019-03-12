@@ -1,7 +1,13 @@
 # tempoGAN
 Here you can find the source code for the SIGGRAPH paper "tempoGAN: A Temporally Coherent, Volumetric GAN for Super-resolution Fluid Flow".
+Authors: You Xie, Erik Franz, MengYu Chu, Nils Thuerey. Technical University of Munich.
 
-Further information: https://ge.in.tum.de/publications/tempoGAN/ 
+Below you can find a quick intro how to get started with the source code,
+in addition to clarifications regarding the main paper.
+
+You can also check out further details our TUM lab homepage: https://ge.in.tum.de/publications/tempoGAN/ 
+
+![An example output of our trained 3D model (low-res left, tempoGAN right)](resources/tempoGAN.jpg)
 
 # Getting started
 This is a brief overview and getting-started guide for the source code of 
