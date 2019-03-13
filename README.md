@@ -5,7 +5,10 @@ Authors: You Xie, Erik Franz, MengYu Chu, Nils Thuerey. Technical University of 
 Below you can find a quick intro how to get started with the source code,
 in addition to clarifications regarding the main paper.
 
-You can also check out further details our TUM lab homepage: https://ge.in.tum.de/publications/tempoGAN/ 
+Paper: <https://arxiv.org/pdf/1801.09710.pdf>
+Main accompanying video: <https://youtu.be/i6JwXYypZ3Y>
+Supplemental video: <https://youtu.be/1KZieEcADKg>
+You can also check out further details our TUM lab homepage: <https://ge.in.tum.de/publications/tempoGAN/> 
 
 ![An example output of our trained 3D model (low-res left, tempoGAN right)](resources/tempoGAN.jpg)
 
@@ -26,7 +29,7 @@ Main source code directories:
 
 `.../tensorflow/GAN:`     contains the tempoGAN model.
 
-And two data directories were ouputs will be written:
+And two data directories were outputs will be written:
 
 `.../tensorflow/2ddata_sim:` contains the training, validation and test data
 
@@ -75,14 +78,24 @@ running them (esp. paths, simulation ID ranges etc.). The code currently uses
 mantaflow, so you can check out the sources at http://mantaflow.com/ 
 for details on how to read and write these files.
 
-## BibTex citation
+# Addendum / Corrections
+
+##Spatial Discriminator Input
+
+One aspect of our network that we only realized recently was that the conditional, spatial discriminator only receives (and should receive) a tougher, jumbled-up low-res input to make its life harder. In our current implementation, it receives a quarter cut-out, combined with velocity information. This is illustrated in the image below: the right side shows the actual input, while the left side shows the regular, full low-res frame.
+
+We noticed that this is "not a bug, but a feature": when the discriminator receives the regular full-res frame, its job is too easy, and the GAN training quickly becomes unbalanced. We found it to be important to provide the discriminator with a challenging, yet useful input such that it's learning progress matches that of the generator network. Note that this is somewhat specific to our GAN training setup. It uses a “traditional” non-saturating loss formulation, as described by [Goodfellow et al. 2014]. For other similarity measures in GANs (such as Wasserstein distances) it will be preferable to provide the discriminator with a regular low-res frame due to the different balancing between the networks.
+
+![Auctal Discriminator input (left) versus regular low-res frame (right)](resources/discriminator-correction.png)
+
+# BibTex citation
 
 If you find this work useful, please consider citing the corresponding paper:
 
 ```
 @article{xie2018tempoGAN,
     title={tempoGAN: A Temporally Coherent, Volumetric GAN for Super-resolution Fluid Flow},
-    author={Xie, You and Franz,Erik and Chu, Mengyu and Thuerey, Nils},
+    author={Xie, You and Franz, Erik and Chu, Mengyu and Thuerey, Nils},
     journal={ACM Transactions on Graphics (TOG)},
     volume={37},
     number={4},
