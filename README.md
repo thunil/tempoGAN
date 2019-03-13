@@ -82,7 +82,7 @@ for details on how to read and write these files.
 
 ##Spatial Discriminator Input
 
-One aspect of our network that we only realized recently was that the conditional, spatial discriminator only receives (and should receive) a tougher, jumbled-up low-res input to make its life harder. In our current implementation, it receives a quarter cut-out, combined with velocity information. This is illustrated in the image below: the right side shows the actual input, while the left side shows the regular, full low-res frame.
+One aspect of our network that we only realized recently was that the conditional, spatial discriminator only receives (and should receive) a tougher, jumbled-up low-res input to make its life harder. In our current implementation, it receives a quarter cut-out, combined with velocity information. This is illustrated in the image below: the left side shows the actual input the discriminator receives, while the right side shows the regular, full low-res frame.
 
 We noticed that this is "not a bug, but a feature": when the discriminator receives the regular full-res frame, its job is too easy, and the GAN training quickly becomes unbalanced. We found it to be important to provide the discriminator with a challenging, yet useful input such that it's learning progress matches that of the generator network. Note that this is somewhat specific to our GAN training setup. It uses a “traditional” non-saturating loss formulation, as described by [Goodfellow et al. 2014]. For other similarity measures in GANs (such as Wasserstein distances) it will be preferable to provide the discriminator with a regular low-res frame due to the different balancing between the networks.
 
