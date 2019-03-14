@@ -8,7 +8,8 @@ in addition to clarifications regarding the main paper.
 Paper: <https://arxiv.org/pdf/1801.09710.pdf>
 Main accompanying video: <https://youtu.be/i6JwXYypZ3Y>
 Supplemental video: <https://youtu.be/1KZieEcADKg>
-You can also check out further details our TUM lab homepage: <https://ge.in.tum.de/publications/tempoGAN/> 
+You can also check out further details our TUM lab homepage: <https://ge.in.tum.de/publications/tempoGAN/> , or
+download pre-trained models below.
 
 ![An example output of our trained 3D model (low-res left, tempoGAN right)](resources/tempoGAN.jpg)
 
@@ -64,6 +65,13 @@ Then you can start to train a GAN using:
 This trains four models, for a quick test disable the later three. These
 example only use 2 simulations as training data. To train proper models, we
 recommend ca. 200 frames of input from at least 10 sims.
+
+Instead of training your own model (which can take a while, especially in 3D),
+you can also download on of our pre-trained models. A 2D model is available here: 
+<https://ge.in.tum.de/download/data/tempoGAN_model2d.zip>
+and this is the 3D version: 
+<https://ge.in.tum.de/download/data/tempoGAN_model3d.tar.gz>.
+
 
 ## Applying the Model
 After you trained a GAN model, you can use the model to generate new outputs:
