@@ -88,7 +88,7 @@ for details on how to read and write these files.
 
 # Addendum / Corrections
 
-##Spatial Discriminator Input
+## Spatial Discriminator Input
 
 One aspect of our network that we only realized recently was that the conditional, spatial discriminator only receives (and should receive) a tougher, jumbled-up low-res input to make its life harder. In our current implementation, it receives a quarter cut-out, combined with velocity information. This is illustrated in the image below: the left side shows the actual input the discriminator receives, while the right side shows the regular, full low-res frame.
 
