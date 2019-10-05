@@ -73,7 +73,7 @@ use relative paths).
 ## Data Generation
 Then generate simulation data with the following command, e.g.:
 
-`manta ../datagen/gen_sim_data.py basePath ../2ddata_sim/ reset 1 savenpz 1`
+`../../build/manta ../datagen/gen_sim_data.py basePath ../2ddata_sim/ reset 1 savenpz 1`
 
 You can add "gui 0" on the command line to hide the UI and speed up the data
 generation runs. Also generate the sample plume data (gen_sim_2006.py for 2D,
