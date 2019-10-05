@@ -17,8 +17,30 @@ download pre-trained models below.
 This is a brief overview and getting-started guide for the source code of 
 the tempoGAN project. It can also be found under tempoGAN/tensorflow/tempoGAN/README.txt.
 
-## Software
+## Software and Installation
+
 Note: tensorflow 1.3 or higher is required to run.
+
+For GPU training use the following packages:
+ - *CUDA 10.0*
+ 
+ 	Visit Nvidia website > cuda downlaods [here](https://developer.nvidia.com/cuda-10.0-download-archive). Download and install it.
+ - *cudnn 7.6*
+ 
+ 	Visit [cuda]() website, download and install it.
+	
+	Visit Nvidia website > cudnn downlaods [here](https://developer.nvidia.com/rdp/cudnn-download). Take the survey, download and install it.
+ - *tensorflow-gpu 1.13*
+ 
+ 	Just install with a package manager:
+	
+	`pip3 install tensorflow-GPU==1.13` 
+ - *imageio*,*keras*,*scipy*,*python-numpy*
+ 
+ 	Just install with a package manager. Python-numpy package is required because sometimes cmake do not find numpy include directory:
+	
+	`pip3 install imageio keras scipy python-numpy` 
+
 
 ## Directories
 Main source code directories:
