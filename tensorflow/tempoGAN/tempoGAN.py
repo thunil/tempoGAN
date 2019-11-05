@@ -117,7 +117,7 @@ useTempoL2 = False
 if(kt > 1e-6):
 	useTempoD = True
 if(kt_l > 1e-6):
-	useTempoD = True
+	useTempoL2 = True
 if(kt > 1e-6 and kt_l > 1e-6):
 	print("ERROR: temporal loss can only be either discriminator or L2, not both")
 	exit(1)
