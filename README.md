@@ -17,8 +17,30 @@ download pre-trained models below.
 This is a brief overview and getting-started guide for the source code of 
 the tempoGAN project. It can also be found under tempoGAN/tensorflow/tempoGAN/README.txt.
 
-## Software
+## Software and Installation
+
 Note: tensorflow 1.3 or higher is required to run.
+
+For GPU training use the following packages:
+ - *CUDA 10.0*
+ 
+ 	Visit Nvidia website > cuda downlaods [here](https://developer.nvidia.com/cuda-10.0-download-archive). Download and install it.
+ - *cudnn 7.6*
+ 
+ 	Visit [cuda]() website, download and install it.
+	
+	Visit Nvidia website > cudnn downlaods [here](https://developer.nvidia.com/rdp/cudnn-download). Take the survey, download and install it.
+ - *tensorflow-gpu 1.13*
+ 
+ 	Just install with a package manager:
+	
+	`pip3 install tensorflow-GPU==1.13` 
+ - *imageio*,*keras*,*scipy*,*python-numpy*
+ 
+ 	Just install with a package manager. Python-numpy package is required because sometimes cmake do not find numpy include directory:
+	
+	`pip3 install imageio keras scipy python-numpy` 
+
 
 ## Directories
 Main source code directories:
@@ -51,10 +73,10 @@ use relative paths).
 ## Data Generation
 Then generate simulation data with the following command, e.g.:
 
-`manta ../datagen/gen_sim_data.py basePath ../2ddata_sim/ reset 1 savenpz 1`
+`../../build/manta ../datagen/gen_sim_data.py basePath ../2ddata_sim/ reset 1 saveuni 1`
 
 You can add "gui 0" on the command line to hide the UI and speed up the data
-generation runs. Also generate the sample plume data (gen_sim_2006.py for 2D,
+generation runs. Make sure to use *saveuni* parameter, otherwise tempoGAN will throw some errors not finding *.uni files. Also generate the sample plume data (gen_sim_2006.py for 2D,
 gen_sim_3006.py for 3D) into the 2ddata_sim directory.
 
 ## Training
