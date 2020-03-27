@@ -19,7 +19,7 @@ the tempoGAN project. It can also be found under tempoGAN/tensorflow/tempoGAN/RE
 
 ## Software and Installation
 
-Note: tensorflow 1.3 or higher is required to run.
+Note: tensorflow (we recommend using tensorflow 1.12 to 1.14) is required to run.
 
 For GPU training use the following packages:
  - *CUDA 10.0*
